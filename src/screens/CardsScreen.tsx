@@ -68,7 +68,7 @@ export default function CardsScreen() {
       {/* Property Count - Minimalist Badge */}
       <View style={styles.countRow}>
         <Text style={styles.countLabel}>
-          {relevantProperties.length} {relevantProperties.length === 1 ? 'Property' : 'Properties'} found
+          {String(relevantProperties.length)} {relevantProperties.length === 1 ? 'Property' : 'Properties'} found
         </Text>
       </View>
 
@@ -123,7 +123,7 @@ export default function CardsScreen() {
               <View style={styles.irrelevantSection}>
                 <View style={styles.separator} />
                 <Text style={styles.irrelevantTitle}>
-                  Archived ({irrelevantProperties.length})
+                  Archived ({String(irrelevantProperties.length)})
                 </Text>
                 {irrelevantProperties.map((property) => (
                   <PropertyCard

@@ -30,5 +30,13 @@ target 'CasaTrackApp' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+    
+    # Suppress deprecation warnings from React Native Pods
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['WARNING_CFLAGS'] ||= ['$(inherited)']
+        config.build_settings['WARNING_CFLAGS'] << '-Wno-deprecated-declarations'
+      end
+    end
   end
 end

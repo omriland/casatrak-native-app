@@ -31,8 +31,14 @@ import { RootStackParamList } from '../navigation/AppNavigator'
 import { theme } from '../theme/theme'
 import FeatherIcon from 'react-native-vector-icons/Feather'
 import IonIcon from 'react-native-vector-icons/Ionicons'
-import { launchImageLibrary, launchCamera, ImagePickerResponse, MediaType } from 'react-native-image-picker'
-import DocumentPicker, { types } from 'react-native-document-picker'
+import {
+  launchImageLibrary,
+  launchCamera,
+  ImagePickerResponse,
+  MediaType,
+  ImagePickerOptions,
+} from 'react-native-image-picker'
+import DocumentPicker, { types, DocumentPickerOptions } from 'react-native-document-picker'
 import { Image as ImageCompressor, Video as VideoCompressor } from 'react-native-compressor'
 import {
   updateNote,
@@ -215,6 +221,168 @@ export default function PropertyDetailScreen() {
     )
   }
 
+  const handleAddFromLibrary = async () => {
+    try {
+      // Use 'mixed' mediaType to allow both photos and videos
+      // Note: Type assertion needed as TypeScript types may not fully support 'mixed'
+      const options: ImagePickerOptions = {
+        mediaType: 'mixed' as any,
+        quality: 0.8,
+        videoQuality: 'medium',
+        allowsEditing: false,
+        selectionLimit: 0, // 0 = unlimited selection
+        includeBase64: false,
+      }
+
+      // Add iOS-specific presentation style
+      if (Platform.OS === 'ios') {
+        (options as any).presentationStyle = 'pageSheet'
+      }
+
+      const result: ImagePickerResponse = await launchImageLibrary(options)
+
+      if (result.didCancel) {
+        return
+      }
+
+      if (result.errorCode) {
+        Alert.alert('Error', result.errorMessage || 'Failed to pick media')
+        return
+      }
+
+      if (result.assets && result.assets.length > 0) {
+        setUploadingAttachment(true)
+        
+        try {
+          // Process all selected assets
+          for (const asset of result.assets) {
+            try {
+              let finalUri = asset.uri!
+              let compressedSize = asset.fileSize || 0
+
+              // Compression with better settings
+              if (asset.type?.startsWith('image')) {
+                // Image compression - balance quality and size
+                try {
+                  finalUri = await ImageCompressor.compress(asset.uri!, {
+                    quality: 0.7,
+                    maxWidth: 1920,
+                    maxHeight: 1920,
+                  })
+                  console.log('Image compressed, new URI:', finalUri)
+                } catch (compressError) {
+                  console.warn('Image compression failed, using original:', compressError)
+                  finalUri = asset.uri!
+                }
+              } else if (asset.type?.startsWith('video')) {
+                // Aggressive video compression - especially important for large videos
+                try {
+                  finalUri = await VideoCompressor.compress(asset.uri!, {
+                    compressionMethod: 'auto',
+                    bitrate: 2000000, // 2 Mbps - good balance for mobile viewing
+                    maxSize: 1920, // Max resolution
+                    minimumFileSizeForCompression: 0, // Compress all videos
+                  })
+                  console.log('Video compressed, new URI:', finalUri)
+                } catch (compressError) {
+                  console.warn('Video compression failed, using original:', compressError)
+                  finalUri = asset.uri!
+                }
+              }
+
+              // Ensure we have a valid URI
+              if (!finalUri) {
+                console.error('No valid URI after compression')
+                Alert.alert('Error', 'Failed to process file: No valid URI')
+                continue
+              }
+
+              // Read the file once and verify it exists
+              // Read as ArrayBuffer for Supabase compatibility
+              let fileArrayBuffer: ArrayBuffer | null = null
+              try {
+                // Ensure URI is properly formatted
+                const uriToFetch = finalUri.startsWith('file://') ? finalUri : `file://${finalUri}`
+                console.log('Fetching file from URI:', uriToFetch)
+                
+                const response = await fetch(uriToFetch)
+                if (!response.ok) {
+                  throw new Error(`Failed to read file: ${response.status} ${response.statusText}`)
+                }
+                
+                // Read as ArrayBuffer (required for Supabase in React Native)
+                fileArrayBuffer = await response.arrayBuffer()
+                
+                if (!fileArrayBuffer || fileArrayBuffer.byteLength === 0) {
+                  throw new Error('File ArrayBuffer is empty')
+                }
+                
+                compressedSize = fileArrayBuffer.byteLength
+                console.log(`Successfully read file: ${compressedSize} bytes`)
+              } catch (readError: any) {
+                console.error('Error reading file:', readError)
+                console.error('File URI:', finalUri)
+                Alert.alert('Error', `Failed to read file: ${readError.message || 'Unknown error'}`)
+                continue
+              }
+
+              // Determine file extension and type
+              const isVideo = asset.type?.startsWith('video/')
+              const isImage = asset.type?.startsWith('image/')
+              const fileExtension = asset.fileName?.split('.').pop() || 
+                (isVideo ? 'mp4' : isImage ? 'jpg' : 'bin')
+              const fileName = asset.fileName || `media_${Date.now()}.${fileExtension}`
+              const fileType = asset.type || (isVideo ? 'video/mp4' : isImage ? 'image/jpeg' : 'application/octet-stream')
+
+              // Upload using the ArrayBuffer directly
+              const file = {
+                uri: finalUri,
+                name: fileName,
+                type: fileType,
+                size: compressedSize,
+                arrayBuffer: fileArrayBuffer, // Pass ArrayBuffer directly
+              }
+              
+              const attachment = await uploadPropertyAttachment(property.id, file)
+              setAttachments((prev) => [attachment, ...prev])
+              
+              // Show compression info for videos
+              if (asset.type?.startsWith('video') && asset.fileSize) {
+                const originalMB = (asset.fileSize / (1024 * 1024)).toFixed(2)
+                const compressedMB = (compressedSize / (1024 * 1024)).toFixed(2)
+                const savings = ((1 - compressedSize / asset.fileSize) * 100).toFixed(0)
+                console.log(`Video compressed: ${originalMB}MB → ${compressedMB}MB (${savings}% reduction)`)
+              }
+            } catch (error: any) {
+              console.error('Error processing individual asset:', error)
+              console.error('Asset details:', {
+                fileName: asset.fileName,
+                type: asset.type,
+                uri: asset.uri,
+                fileSize: asset.fileSize,
+              })
+              Alert.alert(
+                'Upload Error',
+                `Failed to upload ${asset.fileName || 'file'}: ${error.message || 'Unknown error'}`,
+                [{ text: 'OK' }]
+              )
+              // Continue with next asset even if one fails
+            }
+          }
+        } catch (error) {
+          Alert.alert('Error', 'Failed to process some attachments. Please try again.')
+          console.error('Upload error:', error)
+        } finally {
+          setUploadingAttachment(false)
+        }
+      }
+    } catch (error: any) {
+      const errorMessage = error?.message || 'Failed to open media picker'
+      Alert.alert('Error', errorMessage)
+      console.error('Picker error:', error)
+    }
+  }
+
   const handleAddPhotoOrVideo = async (mediaType: 'photo' | 'video', source: 'library' | 'camera' = 'library') => {
     try {
       const options = {
@@ -352,47 +520,55 @@ export default function PropertyDetailScreen() {
 
   const handleAddAttachment = () => {
     if (Platform.OS === 'ios') {
-      // Use native iOS ActionSheet
+      // Use native iOS ActionSheet that matches the system interface
+      // This will show options similar to the native iOS attachment picker
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: ['Cancel', 'Take Photo', 'Choose Photo', 'Take Video', 'Choose Video', 'PDF Document'],
+          options: ['Cancel', 'Photo Library', 'Take Photo or Video', 'Choose Files'],
           cancelButtonIndex: 0,
         },
         (buttonIndex) => {
           if (buttonIndex === 1) {
-            handleAddPhotoOrVideo('photo', 'camera')
+            // Photo Library - use image picker with mixed media type
+            handleAddFromLibrary()
           } else if (buttonIndex === 2) {
-            handleAddPhotoOrVideo('photo', 'library')
+            // Take Photo or Video - show camera options
+            ActionSheetIOS.showActionSheetWithOptions(
+              {
+                options: ['Cancel', 'Take Photo', 'Take Video'],
+                cancelButtonIndex: 0,
+              },
+              (cameraButtonIndex) => {
+                if (cameraButtonIndex === 1) {
+                  handleAddPhotoOrVideo('photo', 'camera')
+                } else if (cameraButtonIndex === 2) {
+                  handleAddPhotoOrVideo('video', 'camera')
+                }
+              }
+            )
           } else if (buttonIndex === 3) {
-            handleAddPhotoOrVideo('video', 'camera')
-          } else if (buttonIndex === 4) {
-            handleAddPhotoOrVideo('video', 'library')
-          } else if (buttonIndex === 5) {
+            // Choose Files - use document picker for PDFs and other files
             handleAddDocument()
           }
         }
       )
     } else {
-      // Android - use Alert
+      // Android - use Alert with simplified options
       Alert.alert(
         'Add Attachment',
         'Choose an option:',
         [
           { 
+            text: 'Choose from Library', 
+            onPress: () => handleAddFromLibrary() 
+          },
+          { 
             text: 'Take Photo', 
             onPress: () => handleAddPhotoOrVideo('photo', 'camera') 
           },
           { 
-            text: 'Choose Photo', 
-            onPress: () => handleAddPhotoOrVideo('photo', 'library') 
-          },
-          { 
             text: 'Take Video', 
             onPress: () => handleAddPhotoOrVideo('video', 'camera') 
-          },
-          { 
-            text: 'Choose Video', 
-            onPress: () => handleAddPhotoOrVideo('video', 'library') 
           },
           { 
             text: 'PDF Document', 
@@ -583,12 +759,12 @@ export default function PropertyDetailScreen() {
             <View style={[styles.card, { flex: 1, marginRight: 12 }]}>
               <Text style={styles.cardLabel}>Size</Text>
               <Text style={styles.specValue}>
-                {property.square_meters && property.square_meters !== 1 ? `${property.square_meters}m²` : 'Unknown'}
+                {property.square_meters && property.square_meters !== 1 ? `${String(property.square_meters)}m²` : 'Unknown'}
               </Text>
             </View>
             <View style={[styles.card, { flex: 1 }]}>
               <Text style={styles.cardLabel}>Rooms</Text>
-              <Text style={styles.specValue}>{property.rooms}</Text>
+              <Text style={styles.specValue}>{String(property.rooms || '—')}</Text>
             </View>
           </View>
 
@@ -638,7 +814,7 @@ export default function PropertyDetailScreen() {
 
           {/* Attachments Section */}
           <Section
-            title={`ATTACHMENTS (${attachments.length})`}
+            title={`ATTACHMENTS (${String(attachments.length)})`}
             rightAction={{ label: 'View All', onPress: () => openGallery(0) }}
           >
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photosScroll}>
@@ -691,7 +867,19 @@ export default function PropertyDetailScreen() {
                 <View style={styles.contactIcon}>
                   <FeatherIcon name="phone" size={18} color={theme.colors.textSecondary} />
                 </View>
-                <Text style={styles.contactText}>{property.contact_phone}</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const phoneNumber = property.contact_phone?.replace(/\D/g, '')
+                    if (phoneNumber) {
+                      Linking.openURL(`tel:${phoneNumber}`)
+                    }
+                  }}
+                  style={{ flex: 1 }}
+                >
+                  <Text style={[styles.contactText, styles.contactPhoneLink]}>
+                    {property.contact_phone}
+                  </Text>
+                </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => Linking.openURL(`https://wa.me/${property.contact_phone?.replace(/\D/g, '')}`)}
                   style={styles.waIcon}
@@ -703,7 +891,7 @@ export default function PropertyDetailScreen() {
           </Section>
 
           {/* Notes Section */}
-          <Section title={`Notes (${notes.length})`}>
+          <Section title={`Notes (${String(notes.length)})`}>
             {loadingNotes ? (
               <ActivityIndicator color={theme.colors.primary} />
             ) : notes.length === 0 ? (
@@ -801,7 +989,7 @@ export default function PropertyDetailScreen() {
                 <FeatherIcon name="x" size={24} color={theme.colors.white} />
               </TouchableOpacity>
               <Text style={styles.galleryCountText}>
-                {(selectedImageIndex ?? 0) + 1} / {attachments.filter(a => a.file_type === 'image').length}
+                {String((selectedImageIndex ?? 0) + 1)} / {String(attachments.filter(a => a.file_type === 'image').length)}
               </Text>
               <TouchableOpacity
                 onPress={() => handleDeleteAttachment(attachments[selectedImageIndex ?? 0])}
@@ -1180,6 +1368,10 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontFamily: theme.typography.fontFamily,
     fontWeight: '700',
+  },
+  contactPhoneLink: {
+    color: theme.colors.secondary,
+    textDecorationLine: 'underline',
   },
   waIcon: {
     width: 36,

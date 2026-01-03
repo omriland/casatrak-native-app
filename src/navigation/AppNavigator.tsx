@@ -23,7 +23,7 @@ export type RootStackParamList = {
 export type MainTabParamList = {
   Home: undefined
   Add: undefined
-  Saved: undefined
+  Flagged: undefined
 }
 
 const Stack = createStackNavigator<RootStackParamList>()
@@ -84,7 +84,7 @@ function MainTabs() {
     >
       <Tab.Screen name="Home" component={DashboardScreen} />
       <Tab.Screen name="Add" component={AddScreen} />
-      <Tab.Screen name="Saved" component={FlaggedScreen} />
+      <Tab.Screen name="Flagged" component={FlaggedScreen} />
     </Tab.Navigator>
   )
 }

@@ -35,7 +35,7 @@ export const theme = {
         full: 9999,
     },
     typography: {
-        fontFamily: 'VarelaRound-Regular',
+        fontFamily: 'Varela Round',
         fontSize: {
             xs: 12,
             sm: 14,

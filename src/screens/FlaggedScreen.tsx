@@ -64,9 +64,9 @@ export default function FlaggedScreen() {
     <View style={styles.container}>
       {/* Refined Header */}
       <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
-        <Text style={styles.headerTitle}>Saved</Text>
+        <Text style={styles.headerTitle}>Flagged</Text>
         <View style={styles.badge}>
-          <Text style={styles.badgeText}>{properties.length}</Text>
+          <Text style={styles.badgeText}>{String(properties.length)}</Text>
         </View>
       </View>
 
@@ -76,9 +76,9 @@ export default function FlaggedScreen() {
           <View style={styles.emptyIconContainer}>
             <FeatherIcon name="bookmark" size={40} color={theme.colors.textMuted} />
           </View>
-          <Text style={styles.emptyTitle}>Nothing saved yet</Text>
+          <Text style={styles.emptyTitle}>Nothing flagged yet</Text>
           <Text style={styles.emptySubtitle}>
-            Properties you save will appear here for quick access
+            Properties you flag will appear here for quick access
           </Text>
         </View>
       ) : (

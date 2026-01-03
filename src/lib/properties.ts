@@ -169,7 +169,7 @@ export async function getPropertyAttachments(propertyId: string): Promise<Attach
 
 export async function uploadPropertyAttachment(
   propertyId: string,
-  file: { uri: string; name: string; type: string; size: number }
+  file: { uri: string; name: string; type: string; size: number; arrayBuffer?: ArrayBuffer }
 ): Promise<Attachment> {
   // 1. Upload file to Supabase Storage
   // We use a timestamped name to avoid collisions
@@ -178,13 +178,46 @@ export async function uploadPropertyAttachment(
   const filePath = fileName
 
   try {
-    // In React Native, fetch(uri) is the standard way to get a blob from a local file
-    const response = await fetch(file.uri)
-    const blob = await response.blob()
+    // In React Native, Supabase Storage requires ArrayBuffer, not Blob
+    let arrayBuffer: ArrayBuffer
+    
+    if (file.arrayBuffer) {
+      // Use the provided ArrayBuffer (most efficient)
+      arrayBuffer = file.arrayBuffer
+      console.log(`Using provided ArrayBuffer: ${file.name}, size: ${arrayBuffer.byteLength} bytes`)
+    } else {
+      // Fallback: read the file from URI and convert to ArrayBuffer
+      try {
+        // Ensure URI is properly formatted (add file:// if needed for iOS)
+        const uri = file.uri.startsWith('file://') ? file.uri : `file://${file.uri}`
+        
+        const response = await fetch(uri)
+        if (!response.ok) {
+          throw new Error(`Failed to read file: ${response.status} ${response.statusText}`)
+        }
+        
+        // Convert response to ArrayBuffer directly (more reliable for React Native)
+        arrayBuffer = await response.arrayBuffer()
+        
+        // Verify arrayBuffer has content
+        if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+          console.error('ArrayBuffer is empty, file URI:', file.uri)
+          throw new Error('File ArrayBuffer is empty or invalid')
+        }
+        
+        console.log(`Successfully read file: ${file.name}, size: ${arrayBuffer.byteLength} bytes`)
+      } catch (fetchError: any) {
+        console.error('Error reading file:', fetchError)
+        console.error('File URI:', file.uri)
+        console.error('File type:', file.type)
+        console.error('File size:', file.size)
+        throw new Error(`Failed to read file content: ${fetchError.message || 'Unknown error'}`)
+      }
+    }
 
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('property-attachments')
-      .upload(filePath, blob, {
+      .upload(filePath, arrayBuffer, {
         contentType: file.type,
         cacheControl: '3600',
         upsert: false
@@ -194,11 +227,14 @@ export async function uploadPropertyAttachment(
 
     // 2. Insert metadata into attachments table
     const isPdf = file.type === 'application/pdf'
+    const isVideo = file.type?.startsWith('video/')
+    const fileType = isPdf ? 'pdf' : (isVideo ? 'video' : 'image')
+    
     const attachment: AttachmentInsert = {
       property_id: propertyId,
       file_name: file.name,
       file_path: filePath,
-      file_type: isPdf ? 'pdf' : 'image',
+      file_type: fileType,
       file_size: file.size,
       mime_type: file.type,
     }

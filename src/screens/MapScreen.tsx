@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react'
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Linking } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import MapView, { Marker, PROVIDER_DEFAULT, Region, Callout } from 'react-native-maps'
 import { useNavigation } from '@react-navigation/native'
@@ -10,6 +10,7 @@ import { Property, PropertyStatus } from '../types/property'
 import { theme } from '../theme/theme'
 import { getStatusLabel, getStatusColor } from '../constants/statuses'
 import FeatherIcon from 'react-native-vector-icons/Feather'
+import IonIcon from 'react-native-vector-icons/Ionicons'
 
 interface TransitStation {
   id: string
@@ -17,6 +18,7 @@ interface TransitStation {
   latitude: number
   longitude: number
   type?: string
+  routes?: string[] // Bus/train line numbers or route names
 }
 
 type NavigationProp = StackNavigationProp<RootStackParamList>
@@ -29,21 +31,23 @@ const DEFAULT_REGION: Region = {
 }
 
 // Get marker color based on status and flagged state (matching web version logic)
-// Note: pinColor only supports 'red', 'green', 'purple' - we map to closest match
-const getMarkerPinColor = (property: Property): 'red' | 'green' | 'purple' => {
+// Note: pinColor only supports 'red', 'green', 'purple' - we use custom marker for grey (irrelevant)
+const getMarkerPinColor = (property: Property): 'red' | 'green' | 'purple' | null => {
+  // Irrelevant properties use custom grey marker (return null to use custom view)
+  if (property.status === 'Irrelevant') {
+    return null // Use custom grey marker instead
+  }
+
   // Flagged properties always get amber/yellow color -> map to 'red' (closest)
   if (property.is_flagged) {
     return 'red' // Amber/yellow for flagged (closest to red)
   }
 
   // Status-based colors (matching web version)
-  const isIrrelevant = property.status === 'Irrelevant'
   const isInterested = property.status === 'Interested'
   const isVisited = property.status === 'Visited'
 
-  if (isIrrelevant) {
-    return 'purple' // Gray -> purple (closest)
-  } else if (isInterested) {
+  if (isInterested) {
     return 'red' // Dark yellow -> red (closest)
   } else if (isVisited) {
     return 'purple' // Light blue -> purple (closest)
@@ -101,6 +105,8 @@ export default function MapScreen() {
   const [isLayerMenuOpen, setIsLayerMenuOpen] = useState(false)
   const [transitStations, setTransitStations] = useState<TransitStation[]>([])
   const [loadingTransit, setLoadingTransit] = useState(false)
+  const [selectedTransitStation, setSelectedTransitStation] = useState<TransitStation | null>(null)
+  const mapRef = useRef<MapView>(null)
 
   useEffect(() => {
     const loadProperties = async () => {
@@ -137,60 +143,128 @@ export default function MapScreen() {
       const minLng = longitude - longitudeDelta / 2
       const maxLng = longitude + longitudeDelta / 2
 
-      // Query for public transport stations (bus stops, train stations, etc.)
+      // Query to get bus stops and train stations with route information
       const query = `
-        [out:json][timeout:25];
+        [out:json][timeout:20];
         (
-          node["public_transport"="station"](${minLat},${minLng},${maxLat},${maxLng});
-          node["public_transport"="stop_position"](${minLat},${minLng},${maxLat},${maxLng});
-          node["railway"="station"](${minLat},${minLng},${maxLat},${maxLng});
-          node["railway"="halt"](${minLat},${minLng},${maxLat},${maxLng});
           node["highway"="bus_stop"](${minLat},${minLng},${maxLat},${maxLng});
+          node["railway"="station"](${minLat},${minLng},${maxLat},${maxLng});
         );
         out body;
-        >;
-        out skel qt;
+        (
+          way(around:50)["route"="bus"]["ref"];
+          relation(around:50)["route"="bus"]["ref"];
+        );
+        out body;
       `
 
-      const response = await fetch('https://overpass-api.de/api/interpreter', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: `data=${encodeURIComponent(query)}`,
-      })
+      // Try multiple Overpass API endpoints for better reliability
+      const endpoints = [
+        'https://overpass-api.de/api/interpreter',
+        'https://overpass.kumi.systems/api/interpreter',
+      ]
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch transit data')
-      }
+      let stations: TransitStation[] = []
+      let lastError: Error | null = null
 
-      const data = await response.json()
-      const stations: TransitStation[] = []
+      for (const endpoint of endpoints) {
+        try {
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
-      // Process nodes
-      if (data.elements) {
-        data.elements.forEach((element: any, index: number) => {
-          if (element.type === 'node' && element.lat && element.lon) {
-            stations.push({
-              id: `transit-${element.id || index}`,
-              name: element.tags?.name || element.tags?.ref || 'Transit Station',
-              latitude: element.lat,
-              longitude: element.lon,
-              type: element.tags?.public_transport || element.tags?.railway || element.tags?.highway || 'station',
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `data=${encodeURIComponent(query)}`,
+            signal: controller.signal,
+          })
+
+          clearTimeout(timeoutId)
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`)
+          }
+
+          const data = await response.json()
+
+          // Process nodes (stations/stops) and extract route information
+          if (data.elements) {
+            data.elements.forEach((element: any, index: number) => {
+              if (element.type === 'node' && element.lat && element.lon) {
+                const routeRefs: string[] = []
+                
+                // Extract routes from various tag formats
+                if (element.tags?.route_ref) {
+                  // Multiple routes separated by semicolon or comma
+                  const refs = element.tags.route_ref.split(/[;,]/).map((r: string) => r.trim()).filter(Boolean)
+                  routeRefs.push(...refs)
+                }
+                if (element.tags?.routes) {
+                  const refs = element.tags.routes.split(/[;,]/).map((r: string) => r.trim()).filter(Boolean)
+                  routeRefs.push(...refs)
+                }
+                if (element.tags?.bus_routes) {
+                  const refs = element.tags.bus_routes.split(/[;,]/).map((r: string) => r.trim()).filter(Boolean)
+                  routeRefs.push(...refs)
+                }
+                // Check if ref itself is a route number (common for bus stops)
+                if (element.tags?.ref && element.tags?.highway === 'bus_stop') {
+                  const ref = element.tags.ref.trim()
+                  // If ref looks like a route number (digits or alphanumeric)
+                  if (/^[\dA-Z]+$/.test(ref) && ref.length <= 4) {
+                    routeRefs.push(ref)
+                  }
+                }
+
+                // Remove duplicates and sort
+                const uniqueRoutes = [...new Set(routeRefs)].sort((a, b) => {
+                  const numA = parseInt(a) || 9999
+                  const numB = parseInt(b) || 9999
+                  return numA - numB
+                })
+
+                stations.push({
+                  id: `transit-${element.id || index}`,
+                  name: element.tags?.name || element.tags?.ref || 'Transit Station',
+                  latitude: element.lat,
+                  longitude: element.lon,
+                  type: element.tags?.railway || element.tags?.highway || 'station',
+                  routes: uniqueRoutes.length > 0 ? uniqueRoutes : undefined,
+                })
+              }
             })
           }
-        })
+
+          // If we got results, break out of the loop
+          if (stations.length > 0) {
+            break
+          }
+        } catch (err: any) {
+          lastError = err
+          // Continue to next endpoint
+          continue
+        }
       }
 
-      // Limit to reasonable number to avoid performance issues
-      setTransitStations(stations.slice(0, 100))
+      // If we got stations, use them (limit to reasonable number)
+      if (stations.length > 0) {
+        setTransitStations(stations.slice(0, 100))
+      } else {
+        // Fallback: Use common Tel Aviv transit stations
+        throw lastError || new Error('No transit stations found')
+      }
     } catch (error) {
-      console.error('Error loading transit stations:', error)
-      // Fallback: Use some common Tel Aviv transit stations
+      console.warn('Error loading transit stations, using fallback:', error)
+      // Fallback: Use some common Tel Aviv transit stations with sample routes
+      const { latitude, longitude } = mapRegion
       setTransitStations([
-        { id: 'ta-central', name: 'Tel Aviv Central', latitude: 32.0853, longitude: 34.7818, type: 'station' },
-        { id: 'ta-hashalom', name: 'Hashalom', latitude: 32.0733, longitude: 34.7911, type: 'station' },
-        { id: 'ta-university', name: 'Tel Aviv University', latitude: 32.1133, longitude: 34.8044, type: 'station' },
+        { id: 'ta-central', name: 'Tel Aviv Central', latitude: 32.0853, longitude: 34.7818, type: 'station', routes: ['1', '4', '5', '18', '25'] },
+        { id: 'ta-hashalom', name: 'Hashalom', latitude: 32.0733, longitude: 34.7911, type: 'station', routes: ['10', '13', '16', '25'] },
+        { id: 'ta-university', name: 'Tel Aviv University', latitude: 32.1133, longitude: 34.8044, type: 'station', routes: ['7', '13', '18', '25', '45'] },
+        { id: 'ta-savidor', name: 'Savidor Central', latitude: 32.0833, longitude: 34.7878, type: 'station', routes: ['1', '4', '5', '10', '16'] },
+        { id: 'ta-hagana', name: 'HaHagana', latitude: 32.0606, longitude: 34.7856, type: 'station', routes: ['4', '5', '7', '18'] },
       ])
     } finally {
       setLoadingTransit(false)
@@ -199,6 +273,29 @@ export default function MapScreen() {
 
   const handleMarkerPress = (property: Property) => {
     navigation.navigate('PropertyDetail', { property })
+  }
+
+  const handleFitToProperties = () => {
+    if (!mapRef.current || visibleProperties.length === 0) return
+
+    const coordinates = visibleProperties
+      .filter((p) => p.latitude !== null && p.longitude !== null)
+      .map((p) => ({
+        latitude: p.latitude!,
+        longitude: p.longitude!,
+      }))
+
+    if (coordinates.length > 0) {
+      mapRef.current.fitToCoordinates(coordinates, {
+        edgePadding: {
+          top: 100,
+          right: 50,
+          bottom: 100,
+          left: 50,
+        },
+        animated: true,
+      })
+    }
   }
 
   // Filter properties based on layer settings
@@ -265,6 +362,7 @@ export default function MapScreen() {
         />
       )}
       <MapView
+        ref={mapRef}
         style={styles.map}
         provider={PROVIDER_DEFAULT}
         region={mapRegion}
@@ -277,7 +375,8 @@ export default function MapScreen() {
           const markerPinColor = getMarkerPinColor(property)
           const markerColor = getMarkerColor(property)
           const showNewBadge = isNewProperty(property.status)
-
+          const isIrrelevant = property.status === 'Irrelevant'
+          
           return (
             <Marker
               key={property.id}
@@ -285,9 +384,15 @@ export default function MapScreen() {
                 latitude: property.latitude!,
                 longitude: property.longitude!,
               }}
-              pinColor={markerPinColor}
+              pinColor={isIrrelevant ? undefined : markerPinColor}
+              anchor={isIrrelevant ? { x: 0.5, y: 0.5 } : undefined}
               title={property.title || property.address || 'Property'}
             >
+              {isIrrelevant && (
+                <View style={styles.greyMarker}>
+                  <View style={styles.greyMarkerPin} />
+                </View>
+              )}
               <Callout onPress={() => handleMarkerPress(property)}>
                 <View style={styles.calloutContainer}>
                   {/* NEW Badge */}
@@ -319,13 +424,13 @@ export default function MapScreen() {
                   <View style={styles.statsContainer}>
                     <View style={styles.statRow}>
                       <Text style={styles.statLabel}>Rooms:</Text>
-                      <Text style={styles.statValue}>{property.rooms}</Text>
+                      <Text style={styles.statValue}>{String(property.rooms || '—')}</Text>
                     </View>
                     <View style={styles.statRow}>
                       <Text style={styles.statLabel}>Size:</Text>
                       <Text style={styles.statValue}>
                         {property.square_meters && property.square_meters !== 1
-                          ? `${property.square_meters}m²`
+                          ? `${String(property.square_meters)}m²`
                           : 'Unknown'}
                       </Text>
                     </View>
@@ -364,17 +469,77 @@ export default function MapScreen() {
                 latitude: station.latitude,
                 longitude: station.longitude,
               }}
-              pinColor="blue"
-              title={station.name}
+              anchor={{ x: 0.5, y: 0.5 }}
             >
-              <Callout>
+              <View style={styles.transitMarker}>
+                <View style={styles.transitIconContainer}>
+                  <IonIcon name="bus" size={10} color="#9CA3AF" />
+                </View>
+              </View>
+              <Callout tooltip={false}>
                 <View style={styles.transitCallout}>
-                  <Text style={styles.transitCalloutTitle}>{station.name}</Text>
-                  <Text style={styles.transitCalloutType}>
-                    {station.type === 'station' ? 'Train Station' : 
-                     station.type === 'stop_position' ? 'Transit Stop' :
-                     station.type === 'bus_stop' ? 'Bus Stop' : 'Transit Station'}
+                  {/* Close Button */}
+                  <TouchableOpacity
+                    style={styles.calloutCloseButton}
+                    onPress={() => {
+                      // Close callout by deselecting
+                      setSelectedTransitStation(null)
+                    }}
+                  >
+                    <FeatherIcon name="x" size={16} color={theme.colors.textSecondary} />
+                  </TouchableOpacity>
+
+                  {/* Station Name */}
+                  <Text style={styles.transitCalloutTitle} numberOfLines={2}>
+                    {String(station.name || 'Transit Station')}
                   </Text>
+                  
+                  {/* Bus Lines with Icon */}
+                  {station.routes && Array.isArray(station.routes) && station.routes.length > 0 && (
+                    <View style={styles.routesContainer}>
+                      <View style={styles.routesList}>
+                        {station.routes
+                          .filter((route) => route != null && route !== '')
+                          .slice(0, 8)
+                          .map((route, idx) => {
+                            // Assign colors to routes (cycling through purple and orange-brown)
+                            const colors = ['#8B5CF6', '#D97706', '#8B5CF6', '#D97706'] // Purple and orange-brown
+                            const isFirst = idx === 0
+                            const routeColor = isFirst ? undefined : colors[(idx - 1) % colors.length]
+                            
+                            return (
+                              <View
+                                key={`route-${idx}-${route}`}
+                                style={[
+                                  styles.routeBadge,
+                                  isFirst && styles.routeBadgeWhite,
+                                  !isFirst && { backgroundColor: routeColor },
+                                  idx > 0 && { marginLeft: 6 },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.routeText,
+                                    isFirst && styles.routeTextDark,
+                                  ]}
+                                >
+                                  {String(route)}
+                                </Text>
+                              </View>
+                            )
+                          })}
+                        {station.routes.filter((route) => route != null && route !== '').length > 8 && (
+                          <Text style={[styles.moreRoutesText, { marginLeft: 6 }]}>
+                            +{String(station.routes.filter((route) => route != null && route !== '').length - 8)}
+                          </Text>
+                        )}
+                        {/* Bus Icon */}
+                        <View style={styles.busIconContainer}>
+                          <IonIcon name="bus" size={18} color={theme.colors.textSecondary} />
+                        </View>
+                      </View>
+                    </View>
+                  )}
                 </View>
               </Callout>
             </Marker>
@@ -383,12 +548,17 @@ export default function MapScreen() {
 
       {/* Property count overlay - Top Left */}
       <View style={[styles.countBadge, { top: Math.max(insets.top - 50, 0), left: 24 }]}>
-        <View style={styles.badge}>
+        <TouchableOpacity
+          style={styles.badge}
+          onPress={handleFitToProperties}
+          activeOpacity={0.7}
+          disabled={visibleProperties.length === 0}
+        >
           <FeatherIcon name="map-pin" size={14} color={theme.colors.primary} style={{ marginRight: 8 }} />
           <Text style={styles.badgeText}>
-            {visibleProperties.length} {visibleProperties.length === 1 ? 'Property' : 'Properties'}
+            {String(visibleProperties.length)} {visibleProperties.length === 1 ? 'Property' : 'Properties'}
           </Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* Layer Controls - Top Right */}
@@ -405,9 +575,9 @@ export default function MapScreen() {
           <View style={styles.layerMenu}>
             <Text style={styles.layerMenuTitle}>Layers</Text>
             
-            {/* Show Irrelevant Properties Toggle */}
+            {/* Show Irrelevant Properties */}
             <TouchableOpacity
-              style={styles.layerMenuItem}
+              style={[styles.layerMenuItem, showIrrelevant && styles.layerMenuItemActive]}
               onPress={() => setShowIrrelevant(!showIrrelevant)}
               activeOpacity={0.7}
             >
@@ -415,32 +585,36 @@ export default function MapScreen() {
                 <FeatherIcon
                   name={showIrrelevant ? 'eye' : 'eye-off'}
                   size={16}
-                  color={theme.colors.textSecondary}
+                  color={showIrrelevant ? theme.colors.primary : theme.colors.textSecondary}
                 />
-                <Text style={styles.layerMenuItemText}>Show Irrelevant</Text>
+                <Text style={[styles.layerMenuItemText, showIrrelevant && styles.layerMenuItemTextActive]}>
+                  Show Irrelevant
+                </Text>
               </View>
-              <View style={[styles.toggle, showIrrelevant && styles.toggleActive]}>
-                <View style={[styles.toggleThumb, showIrrelevant && styles.toggleThumbActive]} />
-              </View>
+              {showIrrelevant && (
+                <FeatherIcon name="check" size={18} color={theme.colors.primary} />
+              )}
             </TouchableOpacity>
 
-            {/* Show Transit Stations Toggle */}
+            {/* Show Transit Stations */}
             <TouchableOpacity
-              style={styles.layerMenuItem}
+              style={[styles.layerMenuItem, showTransit && styles.layerMenuItemActive]}
               onPress={() => setShowTransit(!showTransit)}
               activeOpacity={0.7}
             >
               <View style={styles.layerMenuItemContent}>
                 <FeatherIcon
-                  name={showTransit ? 'map' : 'map'}
+                  name="map"
                   size={16}
-                  color={theme.colors.textSecondary}
+                  color={showTransit ? theme.colors.primary : theme.colors.textSecondary}
                 />
-                <Text style={styles.layerMenuItemText}>Transit Stations</Text>
+                <Text style={[styles.layerMenuItemText, showTransit && styles.layerMenuItemTextActive]}>
+                  Transit Stations
+                </Text>
               </View>
-              <View style={[styles.toggle, showTransit && styles.toggleActive]}>
-                <View style={[styles.toggleThumb, showTransit && styles.toggleThumbActive]} />
-              </View>
+              {showTransit && (
+                <FeatherIcon name="check" size={18} color={theme.colors.primary} />
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -513,9 +687,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    marginBottom: 4,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  layerMenuItemActive: {
+    backgroundColor: theme.colors.primary + '08', // 8% opacity
+    borderBottomColor: 'transparent',
   },
   layerMenuItemContent: {
     flexDirection: 'row',
@@ -529,48 +710,116 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     marginLeft: 10,
   },
-  toggle: {
-    width: 44,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: theme.colors.border,
-    justifyContent: 'center',
-    paddingHorizontal: 2,
-  },
-  toggleActive: {
-    backgroundColor: theme.colors.primary,
-  },
-  toggleThumb: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: theme.colors.white,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
-    position: 'absolute',
-    left: 2,
-  },
-  toggleThumbActive: {
-    left: 22,
+  layerMenuItemTextActive: {
+    color: theme.colors.primary,
+    fontWeight: '700',
   },
   transitCallout: {
-    padding: 8,
-    minWidth: 150,
+    width: 240,
+    padding: 16,
+    paddingTop: 20,
+    backgroundColor: theme.colors.white,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    position: 'relative',
+  },
+  calloutCloseButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
   },
   transitCalloutTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: theme.colors.text,
     fontFamily: theme.typography.fontFamily,
-    marginBottom: 4,
+    marginBottom: 12,
+    textAlign: 'center',
+    paddingRight: 24, // Space for close button
   },
   transitCalloutType: {
     fontSize: 12,
     color: theme.colors.textSecondary,
     fontFamily: theme.typography.fontFamily,
+    marginBottom: 8,
+  },
+  routesContainer: {
+    marginBottom: 12,
+  },
+  routesList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  routeBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    minWidth: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  routeBadgeWhite: {
+    backgroundColor: theme.colors.white,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  routeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.colors.white,
+    fontFamily: theme.typography.fontFamily,
+  },
+  routeTextDark: {
+    color: theme.colors.text,
+  },
+  moreRoutesText: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    fontFamily: theme.typography.fontFamily,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  busIconContainer: {
+    marginLeft: 8,
+    padding: 4,
+  },
+  googleMapsLink: {
+    marginTop: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  googleMapsLinkText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2563EB',
+    fontFamily: theme.typography.fontFamily,
+    textDecorationLine: 'underline',
+  },
+  transitMarker: {
+    width: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  transitIconContainer: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#9CA3AF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   overlay: {
     position: 'absolute',
@@ -690,5 +939,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     fontStyle: 'italic',
+  },
+  greyMarker: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  greyMarkerPin: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#9CA3AF', // Grey color matching irrelevant status
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
   },
 })

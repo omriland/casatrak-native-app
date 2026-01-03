@@ -34,7 +34,7 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string/>
+	<string>We need access to your location to show properties on the map and help you find nearby properties.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>We need access to your camera to take photos and videos of properties.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
