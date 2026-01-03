@@ -14,6 +14,7 @@ import {
   Image,
   Modal,
   KeyboardAvoidingView,
+  ActionSheetIOS,
 } from 'react-native'
 import PagerView from 'react-native-pager-view'
 import { GestureDetector, Gesture } from 'react-native-gesture-handler'
@@ -30,7 +31,7 @@ import { RootStackParamList } from '../navigation/AppNavigator'
 import { theme } from '../theme/theme'
 import FeatherIcon from 'react-native-vector-icons/Feather'
 import IonIcon from 'react-native-vector-icons/Ionicons'
-import { launchImageLibrary } from 'react-native-image-picker'
+import { launchImageLibrary, launchCamera, ImagePickerResponse, MediaType } from 'react-native-image-picker'
 import DocumentPicker, { types } from 'react-native-document-picker'
 import { Image as ImageCompressor, Video as VideoCompressor } from 'react-native-compressor'
 import {
@@ -214,40 +215,109 @@ export default function PropertyDetailScreen() {
     )
   }
 
-  const handleAddPhotoOrVideo = async (mediaType: 'photo' | 'video') => {
-    const result = await launchImageLibrary({
-      mediaType: mediaType,
-      quality: 0.8,
-      videoQuality: 'medium',
-    })
-
-    if (result.assets && result.assets[0]) {
-      const asset = result.assets[0]
-      setUploadingAttachment(true)
-      try {
-        let finalUri = asset.uri!
-
-        // Compression
-        if (asset.type?.startsWith('image')) {
-          finalUri = await ImageCompressor.compress(asset.uri!, { quality: 0.7 })
-        } else if (asset.type?.startsWith('video')) {
-          finalUri = await VideoCompressor.compress(asset.uri!, { compressionMethod: 'auto' })
-        }
-
-        const file = {
-          uri: finalUri,
-          name: asset.fileName || `media_${Date.now()}.${asset.type?.split('/')[1] || 'jpg'}`,
-          type: asset.type || (mediaType === 'photo' ? 'image/jpeg' : 'video/mp4'),
-          size: asset.fileSize || 0,
-        }
-        const attachment = await uploadPropertyAttachment(property.id, file)
-        setAttachments([attachment, ...attachments])
-      } catch (error) {
-        Alert.alert('Error', 'Failed to upload attachment')
-        console.error('Upload error:', error)
-      } finally {
-        setUploadingAttachment(false)
+  const handleAddPhotoOrVideo = async (mediaType: 'photo' | 'video', source: 'library' | 'camera' = 'library') => {
+    try {
+      const options = {
+        mediaType: (mediaType === 'photo' ? 'photo' : 'video') as MediaType,
+        quality: 0.8 as const,
+        videoQuality: 'medium' as const,
+        allowsEditing: false,
+        selectionLimit: 1,
+        includeBase64: false,
+        // iOS specific options for native experience
+        presentationStyle: 'pageSheet' as const,
       }
+
+      const result: ImagePickerResponse = source === 'camera' 
+        ? await launchCamera(options)
+        : await launchImageLibrary(options)
+
+      if (result.didCancel) {
+        return
+      }
+
+      if (result.errorCode) {
+        Alert.alert('Error', result.errorMessage || 'Failed to pick media')
+        return
+      }
+
+      if (result.assets && result.assets[0]) {
+        const asset = result.assets[0]
+        setUploadingAttachment(true)
+        
+        try {
+          let finalUri = asset.uri!
+          let compressedSize = asset.fileSize || 0
+
+          // Compression with better settings
+          if (asset.type?.startsWith('image')) {
+            // Image compression - balance quality and size
+            finalUri = await ImageCompressor.compress(asset.uri!, {
+              quality: 0.7,
+              maxWidth: 1920,
+              maxHeight: 1920,
+            })
+          } else if (asset.type?.startsWith('video')) {
+            // Aggressive video compression - especially important for large videos
+            // Show compression alert (will be dismissed automatically after compression)
+            const compressionAlert = Alert.alert(
+              'Compressing Video',
+              'This may take a moment...',
+              [],
+              { cancelable: false }
+            )
+            
+            try {
+              finalUri = await VideoCompressor.compress(asset.uri!, {
+                compressionMethod: 'auto',
+                bitrate: 2000000, // 2 Mbps - good balance for mobile viewing
+                maxSize: 1920, // Max resolution
+                minimumFileSizeForCompression: 0, // Compress all videos
+              })
+              
+              // Get compressed file size if available
+              try {
+                const response = await fetch(finalUri)
+                const blob = await response.blob()
+                compressedSize = blob.size
+              } catch (e) {
+                // Fallback to original size if we can't determine compressed size
+                compressedSize = asset.fileSize || 0
+              }
+            } finally {
+              // Dismiss the compression alert
+              // Note: Alert.alert doesn't return a dismiss function, so we rely on the upload completion
+            }
+          }
+
+          const file = {
+            uri: finalUri,
+            name: asset.fileName || `media_${Date.now()}.${asset.type?.split('/')[1] || (mediaType === 'photo' ? 'jpg' : 'mp4')}`,
+            type: asset.type || (mediaType === 'photo' ? 'image/jpeg' : 'video/mp4'),
+            size: compressedSize,
+          }
+          
+          const attachment = await uploadPropertyAttachment(property.id, file)
+          setAttachments([attachment, ...attachments])
+          
+          // Show compression info for videos
+          if (asset.type?.startsWith('video') && asset.fileSize) {
+            const originalMB = (asset.fileSize / (1024 * 1024)).toFixed(2)
+            const compressedMB = (compressedSize / (1024 * 1024)).toFixed(2)
+            const savings = ((1 - compressedSize / asset.fileSize) * 100).toFixed(0)
+            console.log(`Video compressed: ${originalMB}MB → ${compressedMB}MB (${savings}% reduction)`)
+          }
+        } catch (error) {
+          Alert.alert('Error', 'Failed to process attachment. Please try again.')
+          console.error('Upload error:', error)
+        } finally {
+          setUploadingAttachment(false)
+        }
+      }
+    } catch (error: any) {
+      const errorMessage = error?.message || 'Failed to open media picker'
+      Alert.alert('Error', errorMessage)
+      console.error('Picker error:', error)
     }
   }
 
@@ -281,15 +351,57 @@ export default function PropertyDetailScreen() {
   }
 
   const handleAddAttachment = () => {
-    Alert.alert(
-      'Add Attachment',
-      'Choose a file type:',
-      [
-        { text: 'Photo', onPress: () => handleAddPhotoOrVideo('photo') },
-        { text: 'Video', onPress: () => handleAddPhotoOrVideo('video') },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    )
+    if (Platform.OS === 'ios') {
+      // Use native iOS ActionSheet
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Take Photo', 'Choose Photo', 'Take Video', 'Choose Video', 'PDF Document'],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            handleAddPhotoOrVideo('photo', 'camera')
+          } else if (buttonIndex === 2) {
+            handleAddPhotoOrVideo('photo', 'library')
+          } else if (buttonIndex === 3) {
+            handleAddPhotoOrVideo('video', 'camera')
+          } else if (buttonIndex === 4) {
+            handleAddPhotoOrVideo('video', 'library')
+          } else if (buttonIndex === 5) {
+            handleAddDocument()
+          }
+        }
+      )
+    } else {
+      // Android - use Alert
+      Alert.alert(
+        'Add Attachment',
+        'Choose an option:',
+        [
+          { 
+            text: 'Take Photo', 
+            onPress: () => handleAddPhotoOrVideo('photo', 'camera') 
+          },
+          { 
+            text: 'Choose Photo', 
+            onPress: () => handleAddPhotoOrVideo('photo', 'library') 
+          },
+          { 
+            text: 'Take Video', 
+            onPress: () => handleAddPhotoOrVideo('video', 'camera') 
+          },
+          { 
+            text: 'Choose Video', 
+            onPress: () => handleAddPhotoOrVideo('video', 'library') 
+          },
+          { 
+            text: 'PDF Document', 
+            onPress: () => handleAddDocument() 
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      )
+    }
   }
 
   const handleShare = async () => {
@@ -397,7 +509,7 @@ export default function PropertyDetailScreen() {
     >
       <View style={styles.container}>
         {/* Dynamic Header */}
-        <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top - 24, 0) }]}>
           <View style={styles.headerTop}>
             <View style={styles.titleInfo}>
               <Text style={styles.headerTitle} numberOfLines={1}>
