@@ -32,7 +32,9 @@ import FeatherIcon from 'react-native-vector-icons/Feather'
 import IonIcon from 'react-native-vector-icons/Ionicons'
 import { launchImageLibrary } from 'react-native-image-picker'
 import DocumentPicker, { types } from 'react-native-document-picker'
+import { Image as ImageCompressor, Video as VideoCompressor } from 'react-native-compressor'
 import {
+  updateNote,
   getPropertyNotes,
   createNote,
   deleteNote,
@@ -78,6 +80,11 @@ export default function PropertyDetailScreen() {
   const [editedDesc, setEditedDesc] = useState(property.description || '')
   const [isSavingDesc, setIsSavingDesc] = useState(false)
 
+  // Note editing state
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [editingNoteContent, setEditingNoteContent] = useState('')
+  const [isSavingNote, setIsSavingNote] = useState(false)
+
   useEffect(() => {
     loadNotes()
     loadAttachments()
@@ -116,6 +123,21 @@ export default function PropertyDetailScreen() {
       Alert.alert('Error', 'Failed to add note')
     } finally {
       setSavingNote(false)
+    }
+  }
+
+  const handleUpdateNoteContent = async () => {
+    if (!editingNoteId || !editingNoteContent.trim()) return
+    setIsSavingNote(true)
+    try {
+      await updateNote(editingNoteId, editingNoteContent.trim())
+      setNotes(notes.map(n => n.id === editingNoteId ? { ...n, content: editingNoteContent.trim() } : n))
+      setEditingNoteId(null)
+      setEditingNoteContent('')
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update note')
+    } finally {
+      setIsSavingNote(false)
     }
   }
 
@@ -192,26 +214,37 @@ export default function PropertyDetailScreen() {
     )
   }
 
-  const handleAddPhoto = async () => {
+  const handleAddPhotoOrVideo = async (mediaType: 'photo' | 'video') => {
     const result = await launchImageLibrary({
-      mediaType: 'photo',
+      mediaType: mediaType,
       quality: 0.8,
+      videoQuality: 'medium',
     })
 
     if (result.assets && result.assets[0]) {
       const asset = result.assets[0]
       setUploadingAttachment(true)
       try {
+        let finalUri = asset.uri!
+
+        // Compression
+        if (asset.type?.startsWith('image')) {
+          finalUri = await ImageCompressor.compress(asset.uri!, { quality: 0.7 })
+        } else if (asset.type?.startsWith('video')) {
+          finalUri = await VideoCompressor.compress(asset.uri!, { compressionMethod: 'auto' })
+        }
+
         const file = {
-          uri: asset.uri!,
-          name: asset.fileName || `photo_${Date.now()}.jpg`,
-          type: asset.type || 'image/jpeg',
+          uri: finalUri,
+          name: asset.fileName || `media_${Date.now()}.${asset.type?.split('/')[1] || 'jpg'}`,
+          type: asset.type || (mediaType === 'photo' ? 'image/jpeg' : 'video/mp4'),
           size: asset.fileSize || 0,
         }
         const attachment = await uploadPropertyAttachment(property.id, file)
         setAttachments([attachment, ...attachments])
       } catch (error) {
-        Alert.alert('Error', 'Failed to upload photo')
+        Alert.alert('Error', 'Failed to upload attachment')
+        console.error('Upload error:', error)
       } finally {
         setUploadingAttachment(false)
       }
@@ -252,8 +285,8 @@ export default function PropertyDetailScreen() {
       'Add Attachment',
       'Choose a file type:',
       [
-        { text: 'Photo (Gallery)', onPress: handleAddPhoto },
-        { text: 'Document (PDF)', onPress: handleAddDocument },
+        { text: 'Photo', onPress: () => handleAddPhotoOrVideo('photo') },
+        { text: 'Video', onPress: () => handleAddPhotoOrVideo('video') },
         { text: 'Cancel', style: 'cancel' },
       ]
     )
@@ -578,7 +611,33 @@ export default function PropertyDetailScreen() {
                       <Text style={styles.noteDelete}>Delete</Text>
                     </TouchableOpacity>
                   </View>
-                  <Text style={[styles.noteContent, { textAlign: 'right' }]}>{note.content}</Text>
+
+                  {editingNoteId === note.id ? (
+                    <View>
+                      <TextInput
+                        style={[styles.noteInput, { textAlign: 'right', minHeight: 60 }]}
+                        value={editingNoteContent}
+                        onChangeText={setEditingNoteContent}
+                        multiline
+                        autoFocus
+                      />
+                      <View style={styles.editDescActions}>
+                        <TouchableOpacity onPress={() => setEditingNoteId(null)} style={styles.cancelDescBtn}>
+                          <Text style={styles.cancelDescText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={handleUpdateNoteContent} style={styles.saveDescBtn} disabled={isSavingNote}>
+                          {isSavingNote ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.saveDescText}>Save</Text>}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <GestureDetector gesture={Gesture.Tap().numberOfTaps(2).onEnd(() => {
+                      runOnJS(setEditingNoteId)(note.id)
+                      runOnJS(setEditingNoteContent)(note.content)
+                    })}>
+                      <Text style={[styles.noteContent, { textAlign: 'right' }]}>{note.content}</Text>
+                    </GestureDetector>
+                  )}
                 </View>
               ))
             )}
