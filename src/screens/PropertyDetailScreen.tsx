@@ -31,6 +31,8 @@ import { RootStackParamList } from '../navigation/AppNavigator'
 import { theme } from '../theme/theme'
 import FeatherIcon from 'react-native-vector-icons/Feather'
 import IonIcon from 'react-native-vector-icons/Ionicons'
+import Video from 'react-native-video'
+import { createThumbnail } from 'react-native-create-thumbnail'
 import {
   launchImageLibrary,
   launchCamera,
@@ -76,6 +78,7 @@ export default function PropertyDetailScreen() {
   const [loadingAttachments, setLoadingAttachments] = useState(true)
   const [savingNote, setSavingNote] = useState(false)
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
+  const [videoThumbnails, setVideoThumbnails] = useState<Record<string, string>>({})
 
   // Zoom and Gallery state
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null)
@@ -112,6 +115,28 @@ export default function PropertyDetailScreen() {
     try {
       const data = await getPropertyAttachments(property.id)
       setAttachments(data)
+      
+      // Generate thumbnails for videos
+      data.forEach(async (att) => {
+        if (att.file_type === 'video') {
+          try {
+            // Safety check: ensure createThumbnail is available
+            if (typeof createThumbnail === 'undefined' || !createThumbnail) {
+              console.warn('createThumbnail native module is not available')
+              return
+            }
+            
+            const url = getPublicUrl(att.file_path)
+            const thumbnail = await createThumbnail({
+              url,
+              timeStamp: 1000,
+            })
+            setVideoThumbnails(prev => ({ ...prev, [att.id]: thumbnail.path }))
+          } catch (e) {
+            console.warn('Failed to create thumbnail for video:', att.file_name, e)
+          }
+        }
+      })
     } catch (error) {
       console.error('Error loading attachments:', error)
     } finally {
@@ -346,6 +371,23 @@ export default function PropertyDetailScreen() {
               const attachment = await uploadPropertyAttachment(property.id, file)
               setAttachments((prev) => [attachment, ...prev])
               
+              // Generate thumbnail for new video
+              if (attachment.file_type === 'video') {
+                try {
+                  // Safety check: ensure createThumbnail is available
+                  if (typeof createThumbnail !== 'undefined' && createThumbnail) {
+                    const url = getPublicUrl(attachment.file_path)
+                    const thumbnail = await createThumbnail({
+                      url,
+                      timeStamp: 1000,
+                    })
+                    setVideoThumbnails(prev => ({ ...prev, [attachment.id]: thumbnail.path }))
+                  }
+                } catch (e) {
+                  console.warn('Failed to create thumbnail for new video:', attachment.file_name, e)
+                }
+              }
+              
               // Show compression info for videos
               if (asset.type?.startsWith('video') && asset.fileSize) {
                 const originalMB = (asset.fileSize / (1024 * 1024)).toFixed(2)
@@ -467,6 +509,23 @@ export default function PropertyDetailScreen() {
           
           const attachment = await uploadPropertyAttachment(property.id, file)
           setAttachments([attachment, ...attachments])
+          
+          // Generate thumbnail for new video
+          if (attachment.file_type === 'video') {
+            try {
+              // Safety check: ensure createThumbnail is available
+              if (typeof createThumbnail !== 'undefined' && createThumbnail) {
+                const url = getPublicUrl(attachment.file_path)
+                const thumbnail = await createThumbnail({
+                  url,
+                  timeStamp: 1000,
+                })
+                setVideoThumbnails(prev => ({ ...prev, [attachment.id]: thumbnail.path }))
+              }
+            } catch (e) {
+              console.warn('Failed to create thumbnail for new video:', attachment.file_name, e)
+            }
+          }
           
           // Show compression info for videos
           if (asset.type?.startsWith('video') && asset.fileSize) {
@@ -650,12 +709,12 @@ export default function PropertyDetailScreen() {
     })
 
   const openGallery = (index: number) => {
-    const imagesOnly = attachments.filter(a => a.file_type === 'image')
-    if (imagesOnly.length === 0) return
+    const mediaOnly = attachments.filter(a => a.file_type === 'image' || a.file_type === 'video')
+    if (mediaOnly.length === 0) return
 
     // Find index in filtered list
     const attachmentId = attachments[index]?.id
-    const galleryIndex = imagesOnly.findIndex(a => a.id === attachmentId)
+    const galleryIndex = mediaOnly.findIndex(a => a.id === attachmentId)
 
     if (galleryIndex !== -1) {
       setSelectedImageIndex(galleryIndex)
@@ -843,6 +902,16 @@ export default function PropertyDetailScreen() {
                       <FeatherIcon name="file-text" size={32} color={theme.colors.textMuted} />
                       <Text style={styles.pdfLabel} numberOfLines={1}>{attachment.file_name}</Text>
                     </View>
+                  ) : attachment.file_type === 'video' ? (
+                    <View style={styles.videoPreviewContainer}>
+                      <Image
+                        source={{ uri: videoThumbnails[attachment.id] || getPublicUrl(attachment.file_path) }}
+                        style={styles.photo}
+                      />
+                      <View style={styles.playIconOverlay}>
+                        <IonIcon name="play" size={24} color="#FFF" />
+                      </View>
+                    </View>
                   ) : (
                     <Image
                       source={{ uri: getPublicUrl(attachment.file_path) }}
@@ -1000,10 +1069,15 @@ export default function PropertyDetailScreen() {
                 <FeatherIcon name="x" size={24} color={theme.colors.white} />
               </TouchableOpacity>
               <Text style={styles.galleryCountText}>
-                {String((selectedImageIndex ?? 0) + 1)} / {String(attachments.filter(a => a.file_type === 'image').length)}
+                {String((selectedImageIndex ?? 0) + 1)} / {String(attachments.filter(a => a.file_type === 'image' || a.file_type === 'video').length)}
               </Text>
               <TouchableOpacity
-                onPress={() => handleDeleteAttachment(attachments[selectedImageIndex ?? 0])}
+                onPress={() => {
+                  const media = attachments.filter(a => a.file_type === 'image' || a.file_type === 'video')
+                  if (selectedImageIndex !== null) {
+                    handleDeleteAttachment(media[selectedImageIndex])
+                  }
+                }}
                 style={styles.galleryActionBtn}
               >
                 <FeatherIcon name="trash-2" size={20} color={theme.colors.white} />
@@ -1016,13 +1090,29 @@ export default function PropertyDetailScreen() {
               onPageSelected={(e) => setSelectedImageIndex(e.nativeEvent.position)}
               scrollEnabled={!isZoomed}
             >
-              {attachments.filter(a => a.file_type === 'image').map((att) => (
-                <ZoomableImage
-                  key={att.id}
-                  uri={getPublicUrl(att.file_path)}
-                  onZoomChange={setIsZoomed}
-                />
-              ))}
+              {attachments.filter(a => a.file_type === 'image' || a.file_type === 'video').map((att) => {
+                const url = getPublicUrl(att.file_path)
+                if (att.file_type === 'video') {
+                  return (
+                    <View key={att.id} style={styles.pagerItem}>
+                      <Video
+                        source={{ uri: url }}
+                        style={styles.pagerVideo}
+                        controls={true}
+                        resizeMode="contain"
+                        paused={selectedImageIndex !== attachments.filter(a => a.file_type === 'image' || a.file_type === 'video').indexOf(att)}
+                      />
+                    </View>
+                  )
+                }
+                return (
+                  <ZoomableImage
+                    key={att.id}
+                    uri={url}
+                    onZoomChange={setIsZoomed}
+                  />
+                )
+              })}
             </PagerView>
           </View>
         </Modal>
@@ -1604,5 +1694,23 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingHorizontal: 8,
     fontFamily: theme.typography.fontFamily,
+  },
+  videoPreviewContainer: {
+    position: 'relative',
+  },
+  playIconOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 16,
+  },
+  pagerVideo: {
+    width: '100%',
+    height: '100%',
   },
 })

@@ -48,10 +48,17 @@ export async function createProperty(property: PropertyInsert): Promise<Property
     .from('properties')
     .insert(property)
     .select()
-    .single()
 
-  if (error) throw error
-  return data
+  if (error) {
+    console.error('Error creating property:', error)
+    throw error
+  }
+  
+  if (!data || data.length === 0) {
+    throw new Error('Property was created but could not be retrieved. Please check your permissions.')
+  }
+  
+  return data[0]
 }
 
 export async function updateProperty(id: string, updates: Partial<PropertyInsert>): Promise<Property> {
@@ -60,10 +67,17 @@ export async function updateProperty(id: string, updates: Partial<PropertyInsert
     .update(updates)
     .eq('id', id)
     .select()
-    .single()
 
-  if (error) throw error
-  return data
+  if (error) {
+    console.error('Error updating property:', error)
+    throw error
+  }
+  
+  if (!data || data.length === 0) {
+    throw new Error('Property was updated but could not be retrieved. Please check your permissions.')
+  }
+  
+  return data[0]
 }
 
 export async function deleteProperty(id: string): Promise<void> {
@@ -81,10 +95,10 @@ export async function updatePropertyStatus(id: string, status: Property['status'
     .update({ status })
     .eq('id', id)
     .select()
-    .single()
 
   if (error) throw error
-  return data
+  if (!data || data.length === 0) throw new Error('Property status update failed to return data')
+  return data[0]
 }
 
 export async function getPropertyNotes(propertyId: string): Promise<Note[]> {
@@ -103,10 +117,10 @@ export async function createNote(propertyId: string, content: string): Promise<N
     .from('notes')
     .insert({ property_id: propertyId, content })
     .select()
-    .single()
 
   if (error) throw error
-  return data
+  if (!data || data.length === 0) throw new Error('Note creation failed to return data')
+  return data[0]
 }
 
 export async function updateNote(id: string, content: string): Promise<Note> {
@@ -115,10 +129,10 @@ export async function updateNote(id: string, content: string): Promise<Note> {
     .update({ content })
     .eq('id', id)
     .select()
-    .single()
 
   if (error) throw error
-  return data
+  if (!data || data.length === 0) throw new Error('Note update failed to return data')
+  return data[0]
 }
 
 export async function deleteNote(id: string): Promise<void> {
@@ -136,10 +150,10 @@ export async function updatePropertyRating(id: string, rating: number): Promise<
     .update({ rating })
     .eq('id', id)
     .select()
-    .single()
 
   if (error) throw error
-  return data
+  if (!data || data.length === 0) throw new Error('Rating update failed to return data')
+  return data[0]
 }
 
 export async function togglePropertyFlag(id: string, isFlagged: boolean): Promise<Property> {
@@ -148,10 +162,10 @@ export async function togglePropertyFlag(id: string, isFlagged: boolean): Promis
     .update({ is_flagged: isFlagged })
     .eq('id', id)
     .select()
-    .single()
 
   if (error) throw error
-  return data
+  if (!data || data.length === 0) throw new Error('Flag toggle failed to return data')
+  return data[0]
 }
 
 // --- Attachment Functions ---
@@ -243,10 +257,10 @@ export async function uploadPropertyAttachment(
       .from('attachments')
       .insert(attachment)
       .select()
-      .single()
 
     if (dbError) throw dbError
-    return data
+    if (!data || data.length === 0) throw new Error('Attachment creation failed to return data')
+    return data[0]
   } catch (err) {
     console.error('Upload failure:', err)
     throw err

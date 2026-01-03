@@ -15,7 +15,7 @@ import { Property } from '../types/property'
 
 // Define navigation types
 export type RootStackParamList = {
-  MainTabs: undefined
+  MainTabs: { screen?: keyof MainTabParamList } | undefined
   PropertyDetail: { property: Property }
   PropertyForm: { property?: Property }
 }
