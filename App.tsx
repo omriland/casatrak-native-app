@@ -8,6 +8,10 @@ import AppNavigator from './src/navigation/AppNavigator'
 import LoginScreen from './src/screens/LoginScreen'
 import { isAuthenticated } from './src/lib/auth'
 import { theme } from './src/theme/theme'
+import { LogBox } from 'react-native'
+
+// Ignore specific deprecation warnings from libraries
+LogBox.ignoreLogs(['InteractionManager has been deprecated'])
 
 export default function App() {
   const [loading, setLoading] = useState(true)
