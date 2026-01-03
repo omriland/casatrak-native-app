@@ -7,6 +7,7 @@ import { theme } from '../theme/theme'
 import CardsScreen from './CardsScreen'
 import KanbanScreen from './KanbanScreen'
 import MapScreen from './MapScreen'
+import FeatherIcon from 'react-native-vector-icons/Feather'
 
 export type DashboardTabParamList = {
   Cards: undefined
@@ -16,7 +17,7 @@ export type DashboardTabParamList = {
 
 const TopTab = createMaterialTopTabNavigator<DashboardTabParamList>()
 
-// Custom Tab Bar (Pill style)
+// Custom Tab Bar (Pill style with Icons)
 function CustomTabBar({ state, descriptors, navigation }: MaterialTopTabBarProps) {
   return (
     <View style={styles.tabBarWrapper}>
@@ -26,6 +27,10 @@ function CustomTabBar({ state, descriptors, navigation }: MaterialTopTabBarProps
           const label = options.tabBarLabel ?? route.name
           const isFocused = state.index === index
 
+          let iconName: 'list' | 'columns' | 'map' = 'list'
+          if (route.name === 'Kanban') iconName = 'columns'
+          if (route.name === 'Map') iconName = 'map'
+
           return (
             <TouchableOpacity
               key={route.key}
@@ -33,6 +38,12 @@ function CustomTabBar({ state, descriptors, navigation }: MaterialTopTabBarProps
               style={[styles.tabButton, isFocused && styles.tabButtonActive]}
               activeOpacity={0.8}
             >
+              <FeatherIcon
+                name={iconName}
+                size={14}
+                color={isFocused ? theme.colors.white : theme.colors.textSecondary}
+                style={{ marginRight: 6 }}
+              />
               <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
                 {String(label)}
               </Text>
@@ -46,11 +57,6 @@ function CustomTabBar({ state, descriptors, navigation }: MaterialTopTabBarProps
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets()
-  const today = new Date().toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric'
-  })
 
   return (
     <View style={styles.container}>
@@ -88,39 +94,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 20,
   },
-  dateText: {
-    fontSize: 14,
-    color: theme.colors.textMuted,
-    fontFamily: theme.typography.fontFamily,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
   titleText: {
     fontSize: 34,
     fontWeight: '800',
     color: theme.colors.text,
     fontFamily: theme.typography.fontFamily,
-  },
-  profileContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: theme.colors.surface,
-    padding: 2,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  profilePlaceholder: {
-    flex: 1,
-    borderRadius: 20,
-    backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profileInitial: {
-    color: theme.colors.white,
-    fontSize: 14,
-    fontWeight: 'bold',
   },
   content: {
     flex: 1,
@@ -134,13 +112,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tabButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 20,
     marginRight: 10,
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: 'rgba(0,0,0,0.05)',
   },
   tabButtonActive: {
     backgroundColor: theme.colors.primary,
@@ -148,7 +128,7 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     color: theme.colors.textSecondary,
     fontFamily: theme.typography.fontFamily,
   },
@@ -156,5 +136,3 @@ const styles = StyleSheet.create({
     color: theme.colors.white,
   },
 })
-
-

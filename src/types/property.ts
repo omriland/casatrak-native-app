@@ -28,6 +28,7 @@ export interface Property {
   updated_at: string
   rating?: number // User rating 0-5 stars
   attachment_count?: number
+  thumbnail_path?: string | null
 }
 
 export interface PropertyInsert {

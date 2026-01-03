@@ -8,6 +8,7 @@ import { RootStackParamList } from '../navigation/AppNavigator'
 import { getProperties } from '../lib/properties'
 import { Property } from '../types/property'
 import { theme } from '../theme/theme'
+import FeatherIcon from 'react-native-vector-icons/Feather'
 
 type NavigationProp = StackNavigationProp<RootStackParamList>
 
@@ -80,6 +81,7 @@ export default function MapScreen() {
       {/* Property count overlay */}
       <View style={[styles.overlay, { top: insets.top + 20 }]}>
         <View style={styles.badge}>
+          <FeatherIcon name="map-pin" size={14} color={theme.colors.primary} style={{ marginRight: 8 }} />
           <Text style={styles.badgeText}>
             {propertiesWithCoordinates.length} Properties
           </Text>
@@ -108,8 +110,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: theme.colors.background,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
     shadowColor: '#000',
@@ -127,4 +131,3 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
   },
 })
-

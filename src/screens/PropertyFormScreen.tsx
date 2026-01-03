@@ -16,6 +16,7 @@ import { RootStackParamList } from '../navigation/AppNavigator'
 import { theme } from '../theme/theme'
 import { createProperty, updateProperty } from '../lib/properties'
 import { PropertySource, PropertyType } from '../types/property'
+import FeatherIcon from 'react-native-vector-icons/Feather'
 
 type PropertyFormRouteProp = RouteProp<RootStackParamList, 'PropertyForm'>
 
@@ -78,9 +79,9 @@ export default function PropertyFormScreen() {
       {/* Refined Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
-          <Text style={styles.headerButtonText}>Cancel</Text>
+          <FeatherIcon name="x" size={24} color={theme.colors.textSecondary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{existingProperty ? 'Edit' : 'Add Property'}</Text>
+        <Text style={styles.headerTitle}>{existingProperty ? 'Edit Property' : 'Add Property'}</Text>
         <TouchableOpacity
           onPress={handleSubmit}
           style={[styles.headerButton, loading && styles.disabled]}
@@ -89,7 +90,9 @@ export default function PropertyFormScreen() {
           {loading ? (
             <ActivityIndicator size="small" color={theme.colors.primary} />
           ) : (
-            <Text style={[styles.headerButtonText, styles.saveButtonText]}>Save</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <FeatherIcon name="check" size={24} color={address.trim() ? theme.colors.primary : theme.colors.textMuted} />
+            </View>
           )}
         </TouchableOpacity>
       </View>
@@ -245,23 +248,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingBottom: 15,
   },
   headerButton: {
-    paddingVertical: 8,
-    minWidth: 60,
-  },
-  headerButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
-    fontFamily: theme.typography.fontFamily,
-  },
-  saveButtonText: {
-    color: theme.colors.primary,
-    fontWeight: '800',
-    textAlign: 'right',
+    padding: 8,
+    minWidth: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,
@@ -344,4 +338,3 @@ const styles = StyleSheet.create({
     color: theme.colors.white,
   },
 })
-

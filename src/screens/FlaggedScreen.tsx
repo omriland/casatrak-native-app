@@ -15,6 +15,7 @@ import { getProperties } from '../lib/properties'
 import { Property } from '../types/property'
 import PropertyCard from '../components/PropertyCard'
 import { theme } from '../theme/theme'
+import FeatherIcon from 'react-native-vector-icons/Feather'
 
 type NavigationProp = StackNavigationProp<RootStackParamList>
 
@@ -73,11 +74,11 @@ export default function FlaggedScreen() {
       {properties.length === 0 ? (
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIconContainer}>
-            <Text style={styles.emptyEmoji}>🚩</Text>
+            <FeatherIcon name="bookmark" size={40} color={theme.colors.textMuted} />
           </View>
           <Text style={styles.emptyTitle}>Nothing saved yet</Text>
           <Text style={styles.emptySubtitle}>
-            Properties you flag will appear here for quick access
+            Properties you save will appear here for quick access
           </Text>
         </View>
       ) : (
@@ -159,9 +160,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  emptyEmoji: {
-    fontSize: 40,
-  },
   emptyTitle: {
     fontSize: 22,
     fontWeight: '800',
@@ -178,4 +176,3 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 })
-

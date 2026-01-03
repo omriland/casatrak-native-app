@@ -15,6 +15,7 @@ import PropertyCard from '../components/PropertyCard'
 import { Property } from '../types/property'
 import { getProperties } from '../lib/properties'
 import { RootStackParamList } from '../navigation/AppNavigator'
+import FeatherIcon from 'react-native-vector-icons/Feather'
 
 type NavigationProp = StackNavigationProp<RootStackParamList>
 
@@ -74,7 +75,7 @@ export default function CardsScreen() {
       {error ? (
         <View style={styles.emptyContainer}>
           <View style={styles.errorCircle}>
-            <Text style={styles.errorIcon}>!</Text>
+            <FeatherIcon name="alert-circle" size={32} color="#DC2626" />
           </View>
           <Text style={styles.emptyTitle}>Connection Error</Text>
           <Text style={styles.emptySubtitle}>{error}</Text>
@@ -85,7 +86,7 @@ export default function CardsScreen() {
       ) : properties.length === 0 ? (
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIconContainer}>
-            <Text style={styles.emptyIcon}>🏠</Text>
+            <FeatherIcon name="home" size={32} color={theme.colors.textMuted} />
           </View>
           <Text style={styles.emptyTitle}>No properties yet</Text>
           <Text style={styles.emptySubtitle}>
@@ -95,7 +96,10 @@ export default function CardsScreen() {
             style={styles.addButton}
             onPress={() => navigation.navigate('PropertyForm', {})}
           >
-            <Text style={styles.addButtonText}>+ Add Property</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <FeatherIcon name="plus" size={18} color={theme.colors.white} style={{ marginRight: 8 }} />
+              <Text style={styles.addButtonText}>Add Property</Text>
+            </View>
           </TouchableOpacity>
         </View>
       ) : (
@@ -180,9 +184,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  emptyIcon: {
-    fontSize: 32,
-  },
   errorCircle: {
     width: 60,
     height: 60,
@@ -191,11 +192,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
-  },
-  errorIcon: {
-    fontSize: 24,
-    color: '#DC2626',
-    fontWeight: 'bold',
   },
   emptyTitle: {
     fontSize: 20,

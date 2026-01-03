@@ -1,7 +1,9 @@
-import React from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Image } from 'react-native'
+import FeatherIcon from 'react-native-vector-icons/Feather'
+import IonIcon from 'react-native-vector-icons/Ionicons'
 import { theme } from '../theme/theme'
-import { Property, PropertyStatus } from '../types/property'
+import { Property } from '../types/property'
+import { getPublicUrl } from '../lib/properties'
 
 interface PropertyCardProps {
   property: Property
@@ -16,28 +18,18 @@ const formatPrice = (price: number | null) => {
   }).format(price) + ' ₪'
 }
 
-const PinIcon = ({ color = '#64748B' }: { color?: string }) => (
-  <View style={styles.pinContainer}>
-    <View style={[styles.pinCircleIcon, { borderColor: color }]} />
-    <View style={[styles.pinPoint, { backgroundColor: color }]} />
-  </View>
-)
-
-const MinimalFlagIcon = ({ color = theme.colors.primary }: { color?: string }) => (
-  <View style={styles.flagContainer}>
-    <View style={[styles.flagPole, { backgroundColor: color }]} />
-    <View style={[styles.flagBanner, { backgroundColor: color }]} />
-  </View>
-)
-
 const Stars = ({ rating }: { rating?: number }) => {
   if (!rating || rating === 0) return null
   return (
     <View style={styles.starsContainer}>
       {[1, 2, 3, 4, 5].map((s) => (
-        <Text key={s} style={[styles.star, s <= rating ? styles.starFilled : styles.starEmpty]}>
-          ★
-        </Text>
+        <IonIcon
+          key={s}
+          name={s <= rating ? 'star' : 'star-outline'}
+          size={14}
+          color={s <= rating ? '#FBBF24' : '#E2E8F0'}
+          style={{ marginRight: 1 }}
+        />
       ))}
     </View>
   )
@@ -55,7 +47,9 @@ export default function PropertyCard({ property, onPress }: PropertyCardProps) {
       {/* Top Section: Title & Status Column */}
       <View style={styles.headerRow}>
         <View style={styles.titleArea}>
-          {isFlagged && <MinimalFlagIcon color="#FBBF24" />}
+          {isFlagged && (
+            <FeatherIcon name="flag" size={16} color="#FBBF24" style={styles.flagIcon} />
+          )}
           <Text style={styles.title} numberOfLines={2}>
             {property.title || property.address || 'Untitled'}
           </Text>
@@ -71,7 +65,7 @@ export default function PropertyCard({ property, onPress }: PropertyCardProps) {
 
       {/* Middle Section: Address */}
       <View style={styles.addressRow}>
-        <PinIcon />
+        <FeatherIcon name="map-pin" size={14} color="#64748B" style={styles.pinIcon} />
         <Text style={styles.addressText} numberOfLines={1}>{property.address}</Text>
       </View>
 
@@ -125,29 +119,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     paddingRight: 10,
   },
-  rightColumn: {
-    alignItems: 'flex-end',
-    gap: 6,
-  },
-  flagContainer: {
-    width: 14,
-    height: 18,
+  flagIcon: {
     marginRight: 8,
     marginTop: 4,
   },
-  flagPole: {
-    width: 2,
-    height: 16,
-    borderRadius: 1,
-  },
-  flagBanner: {
-    width: 10,
-    height: 7,
-    position: 'absolute',
-    left: 2,
-    top: 1,
-    borderTopRightRadius: 2,
-    borderBottomRightRadius: 2,
+  rightColumn: {
+    alignItems: 'flex-end',
+    gap: 6,
   },
   title: {
     flex: 1,
@@ -159,16 +137,6 @@ const styles = StyleSheet.create({
   },
   starsContainer: {
     flexDirection: 'row',
-  },
-  star: {
-    fontSize: 14,
-    marginHorizontal: -1,
-  },
-  starFilled: {
-    color: '#FBBF24',
-  },
-  starEmpty: {
-    color: '#E2E8F0',
   },
   statusBadge: {
     backgroundColor: '#F1F5F9',
@@ -188,24 +156,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  pinContainer: {
-    width: 16,
-    height: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  pinCircleIcon: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 1.5,
-  },
-  pinPoint: {
-    width: 2,
-    height: 4,
-    borderRadius: 1,
-    marginTop: -2,
+  pinIcon: {
+    marginRight: 6,
   },
   addressText: {
     fontSize: 14,

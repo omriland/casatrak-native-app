@@ -4,6 +4,7 @@ import { createStackNavigator } from '@react-navigation/stack'
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { theme } from '../theme/theme'
+import FeatherIcon from 'react-native-vector-icons/Feather'
 
 import DashboardScreen from '../screens/DashboardScreen'
 import AddScreen from '../screens/AddScreen'
@@ -28,29 +29,6 @@ export type MainTabParamList = {
 const Stack = createStackNavigator<RootStackParamList>()
 const Tab = createBottomTabNavigator<MainTabParamList>()
 
-// --- Minimalist Icons ---
-
-const HomeIcon = ({ color }: { color: string }) => (
-  <View style={styles.iconWrapper}>
-    <View style={[styles.homeRoof, { borderBottomColor: color }]} />
-    <View style={[styles.homeBase, { borderColor: color, borderTopWidth: 0 }]} />
-  </View>
-)
-
-const SavedIcon = ({ color }: { color: string }) => (
-  <View style={styles.iconWrapper}>
-    <View style={[styles.flagPole, { backgroundColor: color }]} />
-    <View style={[styles.flagBannerBody, { backgroundColor: color }]} />
-  </View>
-)
-
-const AddIcon = () => (
-  <View style={styles.addIconContent}>
-    <View style={styles.addPlusHorizontal} />
-    <View style={styles.addPlusVertical} />
-  </View>
-)
-
 // --- Custom Tab Bar Component ---
 
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
@@ -71,12 +49,12 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                 activeOpacity={0.9}
                 style={styles.prominentButton}
               >
-                <AddIcon />
+                <FeatherIcon name="plus" size={28} color={theme.colors.white} />
               </TouchableOpacity>
             )
           }
 
-          let IconComponent = route.name === 'Home' ? HomeIcon : SavedIcon
+          let iconName: 'home' | 'bookmark' = route.name === 'Home' ? 'home' : 'bookmark'
           const color = isFocused ? theme.colors.primary : theme.colors.textMuted
 
           return (
@@ -86,7 +64,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               style={styles.tabItem}
               activeOpacity={0.7}
             >
-              <IconComponent color={color} />
+              <FeatherIcon name={iconName} size={24} color={color} />
               {isFocused && <View style={styles.activeDot} />}
             </TouchableOpacity>
           )
@@ -153,47 +131,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: '100%',
   },
-  iconWrapper: {
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  homeRoof: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 10,
-    borderRightWidth: 10,
-    borderBottomWidth: 8,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderBottomColor: theme.colors.textMuted,
-    marginBottom: -1,
-  },
-  homeBase: {
-    width: 16,
-    height: 10,
-    borderWidth: 2,
-    borderTopWidth: 0,
-    borderBottomLeftRadius: 2,
-    borderBottomRightRadius: 2,
-  },
-  flagPole: {
-    width: 2,
-    height: 14,
-    borderRadius: 1,
-    position: 'absolute',
-    left: 4,
-  },
-  flagBannerBody: {
-    width: 12,
-    height: 8,
-    borderTopRightRadius: 2,
-    borderBottomRightRadius: 2,
-    position: 'absolute',
-    left: 6,
-    top: 5,
-  },
   activeDot: {
     width: 4,
     height: 4,
@@ -208,25 +145,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  addIconContent: {
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addPlusHorizontal: {
-    width: 18,
-    height: 3,
-    backgroundColor: theme.colors.white,
-    borderRadius: 1.5,
-    position: 'absolute',
-  },
-  addPlusVertical: {
-    width: 3,
-    height: 18,
-    backgroundColor: theme.colors.white,
-    borderRadius: 1.5,
-    position: 'absolute',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
 })
