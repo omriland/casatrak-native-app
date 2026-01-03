@@ -874,14 +874,25 @@ export default function PropertyDetailScreen() {
                       Linking.openURL(`tel:${phoneNumber}`)
                     }
                   }}
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, justifyContent: 'center' }}
                 >
                   <Text style={[styles.contactText, styles.contactPhoneLink]}>
                     {property.contact_phone}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => Linking.openURL(`https://wa.me/${property.contact_phone?.replace(/\D/g, '')}`)}
+                  onPress={() => {
+                    let phoneNumber = property.contact_phone?.replace(/\D/g, '') || ''
+                    // Remove leading 0 if present (Israeli format)
+                    if (phoneNumber.startsWith('0')) {
+                      phoneNumber = phoneNumber.substring(1)
+                    }
+                    // Add 972 prefix if not already present
+                    if (!phoneNumber.startsWith('972')) {
+                      phoneNumber = `972${phoneNumber}`
+                    }
+                    Linking.openURL(`https://wa.me/${phoneNumber}`)
+                  }}
                   style={styles.waIcon}
                 >
                   <IonIcon name="logo-whatsapp" size={20} color="#FFF" />
@@ -1371,7 +1382,6 @@ const styles = StyleSheet.create({
   },
   contactPhoneLink: {
     color: theme.colors.secondary,
-    textDecorationLine: 'underline',
   },
   waIcon: {
     width: 36,

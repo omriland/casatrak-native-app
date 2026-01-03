@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { StatusBar, ActivityIndicator, View, StyleSheet } from 'react-native'
+import React, { useState, useEffect, useRef } from 'react'
+import { StatusBar, ActivityIndicator, View, StyleSheet, AppState } from 'react-native'
 import { NavigationContainer } from '@react-navigation/native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
@@ -16,9 +16,23 @@ LogBox.ignoreLogs(['InteractionManager has been deprecated'])
 export default function App() {
   const [loading, setLoading] = useState(true)
   const [loggedIn, setLoggedIn] = useState(false)
+  const navigationRef = useRef<any>(null)
 
   useEffect(() => {
     checkAuth()
+  }, [])
+
+  // Listen for app state changes to re-check auth (useful after logout)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        checkAuth()
+      }
+    })
+
+    return () => {
+      subscription.remove()
+    }
   }, [])
 
   const checkAuth = async () => {
@@ -36,6 +50,11 @@ export default function App() {
     setLoggedIn(true)
   }
 
+  const handleNavigationStateChange = () => {
+    // Re-check auth on navigation state changes
+    checkAuth()
+  }
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -48,13 +67,9 @@ export default function App() {
     <GestureHandlerRootView style={styles.container}>
       <SafeAreaProvider>
         <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
-        {loggedIn ? (
-          <NavigationContainer>
-            <AppNavigator />
-          </NavigationContainer>
-        ) : (
-          <LoginScreen onLogin={handleLogin} />
-        )}
+        <NavigationContainer ref={navigationRef} onStateChange={handleNavigationStateChange}>
+          {loggedIn ? <AppNavigator /> : <LoginScreen onLogin={handleLogin} />}
+        </NavigationContainer>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   )

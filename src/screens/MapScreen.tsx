@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Linking } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import MapView, { Marker, PROVIDER_DEFAULT, Region, Callout } from 'react-native-maps'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { RootStackParamList } from '../navigation/AppNavigator'
 import { getProperties } from '../lib/properties'
@@ -108,19 +108,28 @@ export default function MapScreen() {
   const [selectedTransitStation, setSelectedTransitStation] = useState<TransitStation | null>(null)
   const mapRef = useRef<MapView>(null)
 
-  useEffect(() => {
-    const loadProperties = async () => {
-      try {
-        const data = await getProperties()
-        setProperties(data)
-      } catch (error) {
-        console.error('Error loading properties:', error)
-      } finally {
-        setLoading(false)
-      }
+  const loadProperties = async () => {
+    try {
+      const data = await getProperties()
+      setProperties(data)
+    } catch (error) {
+      console.error('Error loading properties:', error)
+    } finally {
+      setLoading(false)
     }
+  }
+
+  // Load properties on mount
+  useEffect(() => {
     loadProperties()
   }, [])
+
+  // Refresh properties when screen comes into focus (to sync with web updates)
+  useFocusEffect(
+    useCallback(() => {
+      loadProperties()
+    }, [])
+  )
 
   // Load transit stations when toggle is enabled
   useEffect(() => {

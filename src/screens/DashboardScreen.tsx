@@ -1,13 +1,15 @@
 import React from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs'
 import { MaterialTopTabBarProps } from '@react-navigation/material-top-tabs'
+import { useNavigation } from '@react-navigation/native'
 import { theme } from '../theme/theme'
 import CardsScreen from './CardsScreen'
 import KanbanScreen from './KanbanScreen'
 import MapScreen from './MapScreen'
 import FeatherIcon from 'react-native-vector-icons/Feather'
+import { logout } from '../lib/auth'
 
 export type DashboardTabParamList = {
   Cards: undefined
@@ -57,6 +59,35 @@ function CustomTabBar({ state, descriptors, navigation }: MaterialTopTabBarProps
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets()
+  const navigation = useNavigation()
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            await logout()
+            // Small delay to ensure logout completes, then trigger navigation reset
+            // This will cause App.tsx to re-check auth via handleNavigationStateChange
+            setTimeout(() => {
+              navigation.getParent()?.reset({
+                index: 0,
+                routes: [{ name: 'MainTabs' as never }],
+              })
+            }, 100)
+          },
+        },
+      ]
+    )
+  }
 
   return (
     <View style={styles.container}>
@@ -65,6 +96,9 @@ export default function DashboardScreen() {
         <View>
           <Text style={styles.titleText}>CasaTrack</Text>
         </View>
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+          <FeatherIcon name="log-out" size={20} color={theme.colors.textSecondary} />
+        </TouchableOpacity>
       </View>
 
       {/* Main Content Area */}
@@ -134,5 +168,12 @@ const styles = StyleSheet.create({
   },
   tabLabelActive: {
     color: theme.colors.white,
+  },
+  logoutButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
   },
 })
