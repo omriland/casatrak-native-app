@@ -29,7 +29,7 @@ export default function FlaggedScreen() {
   const loadProperties = useCallback(async () => {
     try {
       const data = await getProperties()
-      const flaggedProperties = data.filter((p) => p.is_flagged)
+      const flaggedProperties = data.filter((p) => p.is_flagged && p.status !== 'Irrelevant')
       setProperties(flaggedProperties)
     } catch (error) {
       console.error('Error loading flagged properties:', error)

@@ -45,7 +45,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             return (
               <TouchableOpacity
                 key={route.key}
-                onPress={() => navigation.navigate('Add')}
+                onPress={() => navigation.navigate('PropertyForm' as any, {})}
                 activeOpacity={0.9}
                 style={styles.prominentButton}
               >

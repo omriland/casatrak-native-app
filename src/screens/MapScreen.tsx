@@ -5,12 +5,13 @@ import MapView, { Marker, PROVIDER_DEFAULT, Region, Callout } from 'react-native
 import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { RootStackParamList } from '../navigation/AppNavigator'
-import { getProperties } from '../lib/properties'
+import { getProperties, updateProperty } from '../lib/properties'
 import { Property, PropertyStatus } from '../types/property'
 import { theme } from '../theme/theme'
 import { getStatusLabel, getStatusColor } from '../constants/statuses'
 import FeatherIcon from 'react-native-vector-icons/Feather'
 import IonIcon from 'react-native-vector-icons/Ionicons'
+import { Alert } from 'react-native'
 
 interface TransitStation {
   id: string
@@ -29,6 +30,101 @@ const DEFAULT_REGION: Region = {
   latitudeDelta: 0.1,
   longitudeDelta: 0.1,
 }
+
+// Light map style to force light mode
+const LIGHT_MAP_STYLE = [
+  {
+    elementType: 'geometry',
+    stylers: [{ color: '#f5f5f5' }],
+  },
+  {
+    elementType: 'labels.icon',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#616161' }],
+  },
+  {
+    elementType: 'labels.text.stroke',
+    stylers: [{ color: '#f5f5f5' }],
+  },
+  {
+    featureType: 'administrative.land_parcel',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#bdbdbd' }],
+  },
+  {
+    featureType: 'administrative.neighborhood',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#757575' }],
+  },
+  {
+    featureType: 'poi',
+    elementType: 'geometry',
+    stylers: [{ color: '#eeeeee' }],
+  },
+  {
+    featureType: 'poi',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#757575' }],
+  },
+  {
+    featureType: 'poi.park',
+    elementType: 'geometry',
+    stylers: [{ color: '#e5e5e5' }],
+  },
+  {
+    featureType: 'poi.park',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#9e9e9e' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'geometry',
+    stylers: [{ color: '#ffffff' }],
+  },
+  {
+    featureType: 'road.arterial',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#757575' }],
+  },
+  {
+    featureType: 'road.highway',
+    elementType: 'geometry',
+    stylers: [{ color: '#dadada' }],
+  },
+  {
+    featureType: 'road.highway',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#616161' }],
+  },
+  {
+    featureType: 'road.local',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#9e9e9e' }],
+  },
+  {
+    featureType: 'transit.line',
+    elementType: 'geometry',
+    stylers: [{ color: '#e5e5e5' }],
+  },
+  {
+    featureType: 'transit.station',
+    elementType: 'geometry',
+    stylers: [{ color: '#eeeeee' }],
+  },
+  {
+    featureType: 'water',
+    elementType: 'geometry',
+    stylers: [{ color: '#c9c9c9' }],
+  },
+  {
+    featureType: 'water',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#9e9e9e' }],
+  },
+]
 
 // Get marker color based on status and flagged state (matching web version logic)
 // Note: pinColor only supports 'red', 'green', 'purple' - we use custom marker for grey (irrelevant)
@@ -106,6 +202,8 @@ export default function MapScreen() {
   const [transitStations, setTransitStations] = useState<TransitStation[]>([])
   const [loadingTransit, setLoadingTransit] = useState(false)
   const [selectedTransitStation, setSelectedTransitStation] = useState<TransitStation | null>(null)
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null)
+  const [editingLocationPropertyId, setEditingLocationPropertyId] = useState<string | null>(null)
   const mapRef = useRef<MapView>(null)
 
   const loadProperties = async () => {
@@ -281,7 +379,61 @@ export default function MapScreen() {
   }
 
   const handleMarkerPress = (property: Property) => {
+    // Don't navigate if in edit location mode
+    if (editingLocationPropertyId) return
     navigation.navigate('PropertyDetail', { property })
+  }
+
+  const handleMarkerSelect = (propertyId: string) => {
+    if (editingLocationPropertyId) {
+      // If in edit mode, don't change selection
+      return
+    }
+    setSelectedPropertyId(propertyId)
+  }
+
+  const handleCalloutDismiss = () => {
+    setSelectedPropertyId(null)
+  }
+
+  const handleStartEditLocation = (propertyId: string) => {
+    setEditingLocationPropertyId(propertyId)
+    setSelectedPropertyId(null) // Close callout
+  }
+
+  const handleCancelEditLocation = () => {
+    setEditingLocationPropertyId(null)
+  }
+
+  const handleMapPress = async (e: any) => {
+    if (!editingLocationPropertyId) return
+    
+    const { latitude, longitude } = e.nativeEvent.coordinate
+    const property = properties.find(p => p.id === editingLocationPropertyId)
+    if (!property) return
+
+    try {
+      // Update the property coordinates in the database
+      await updateProperty(editingLocationPropertyId, {
+        latitude,
+        longitude,
+      })
+      
+      // Update local state
+      setProperties((prevProperties) =>
+        prevProperties.map((p) =>
+          p.id === editingLocationPropertyId
+            ? { ...p, latitude, longitude }
+            : p
+        )
+      )
+      
+      Alert.alert('Success', 'Location updated!')
+      setEditingLocationPropertyId(null)
+    } catch (error) {
+      console.error('Error updating property coordinates:', error)
+      Alert.alert('Error', 'Failed to update property location. Please try again.')
+    }
   }
 
   const handleFitToProperties = () => {
@@ -370,15 +522,27 @@ export default function MapScreen() {
           onPress={() => setIsLayerMenuOpen(false)}
         />
       )}
+      {/* Overlay to close callout when tapping outside */}
+      {selectedPropertyId && (
+        <TouchableOpacity
+          style={styles.overlay}
+          activeOpacity={1}
+          onPress={handleCalloutDismiss}
+        />
+      )}
       <MapView
         ref={mapRef}
         style={styles.map}
         provider={PROVIDER_DEFAULT}
         region={mapRegion}
+        mapType="standard"
+        userInterfaceStyle="light"
+        customMapStyle={LIGHT_MAP_STYLE}
         showsUserLocation
         showsMyLocationButton
         showsTraffic={false}
         showsBuildings={true}
+        onPress={handleMapPress}
       >
         {visibleProperties.map((property) => {
           const markerPinColor = getMarkerPinColor(property)
@@ -393,79 +557,11 @@ export default function MapScreen() {
                 latitude: property.latitude!,
                 longitude: property.longitude!,
               }}
-              pinColor={isIrrelevant ? undefined : markerPinColor}
-              anchor={isIrrelevant ? { x: 0.5, y: 0.5 } : undefined}
-              title={property.title || property.address || 'Property'}
-            >
-              {isIrrelevant && (
-                <View style={styles.greyMarker}>
-                  <View style={styles.greyMarkerPin} />
-                </View>
-              )}
-              <Callout onPress={() => handleMarkerPress(property)}>
-                <View style={styles.calloutContainer}>
-                  {/* NEW Badge */}
-                  {showNewBadge && (
-                    <View style={styles.newBadge}>
-                      <Text style={styles.newBadgeText}>NEW</Text>
-                    </View>
-                  )}
-                  
-                  {/* Property Title */}
-                  <Text style={styles.calloutTitle} numberOfLines={2}>
-                    {property.title || property.address || 'Property'}
-                  </Text>
-                  
-                  {/* Address */}
-                  <Text style={styles.calloutAddress} numberOfLines={1}>
-                    {property.address}
-                  </Text>
-                  
-                  {/* Status Badge */}
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(property.status) + '20' }]}>
-                    <View style={[styles.statusDot, { backgroundColor: getStatusColor(property.status) }]} />
-                    <Text style={[styles.statusText, { color: getStatusColor(property.status) }]}>
-                      {getStatusLabel(property.status)}
-                    </Text>
-                  </View>
-                  
-                  {/* Property Stats */}
-                  <View style={styles.statsContainer}>
-                    <View style={styles.statRow}>
-                      <Text style={styles.statLabel}>Rooms:</Text>
-                      <Text style={styles.statValue}>{String(property.rooms || '—')}</Text>
-                    </View>
-                    <View style={styles.statRow}>
-                      <Text style={styles.statLabel}>Size:</Text>
-                      <Text style={styles.statValue}>
-                        {property.square_meters && property.square_meters !== 1
-                          ? `${String(property.square_meters)}m²`
-                          : 'Unknown'}
-                      </Text>
-                    </View>
-                    <View style={styles.statRow}>
-                      <Text style={styles.statLabel}>Price:</Text>
-                      <Text style={styles.statValue}>{formatPrice(property.asked_price)}</Text>
-                    </View>
-                    {property.price_per_meter &&
-                      property.asked_price !== null &&
-                      property.asked_price !== 1 &&
-                      property.square_meters !== null &&
-                      property.square_meters !== 1 && (
-                        <View style={styles.statRow}>
-                          <Text style={styles.statLabel}>Per m²:</Text>
-                          <Text style={styles.statValue}>
-                            {formatPrice(Math.round(property.price_per_meter))}
-                          </Text>
-                        </View>
-                      )}
-                  </View>
-                  
-                  {/* Tap to view details */}
-                  <Text style={styles.tapHint}>Tap to view details</Text>
-                </View>
-              </Callout>
-            </Marker>
+              pinColor={editingLocationPropertyId === property.id ? '#ef4444' : (isIrrelevant ? '#9CA3AF' : markerPinColor || undefined)}
+              anchor={{ x: 0.5, y: 1 }}
+              tracksViewChanges={editingLocationPropertyId === property.id}
+              onPress={() => handleMarkerSelect(property.id)}
+            />
           )
         })}
 
@@ -628,6 +724,114 @@ export default function MapScreen() {
           </View>
         )}
       </View>
+
+      {/* Edit Location Mode Overlay */}
+      {editingLocationPropertyId && (
+        <View style={[styles.editLocationOverlay, { top: Math.max(insets.top - 50, 0) }]}>
+          <View style={styles.editLocationBanner}>
+            <View style={styles.editLocationBannerContent}>
+              <FeatherIcon name="crosshair" size={20} color="#FFF" />
+              <Text style={styles.editLocationBannerText}>Tap anywhere on the map to set new location</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.editLocationCancelButton}
+              onPress={handleCancelEditLocation}
+            >
+              <Text style={styles.editLocationCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Selected Property Card */}
+      {selectedPropertyId && !editingLocationPropertyId && (() => {
+        const property = properties.find(p => p.id === selectedPropertyId)
+        if (!property) return null
+        const showNewBadge = isNewProperty(property.status)
+        
+        return (
+          <View style={[styles.propertyCard, { bottom: Math.max(insets.bottom, 16) + 16 }]}>
+            {/* Dismiss overlay */}
+            <TouchableOpacity 
+              style={styles.cardDismissArea}
+              onPress={handleCalloutDismiss}
+              activeOpacity={1}
+            />
+            
+            <View style={styles.cardContent}>
+              {/* Close Button */}
+              <TouchableOpacity 
+                style={styles.cardCloseButton}
+                onPress={handleCalloutDismiss}
+              >
+                <FeatherIcon name="x" size={20} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+              
+              {/* NEW Badge */}
+              {showNewBadge && (
+                <View style={styles.cardNewBadge}>
+                  <Text style={styles.newBadgeText}>NEW</Text>
+                </View>
+              )}
+              
+              {/* Property Title */}
+              <Text style={styles.cardTitle} numberOfLines={2}>
+                {property.title || property.address || 'Property'}
+              </Text>
+              
+              {/* Address */}
+              <Text style={styles.cardAddress} numberOfLines={1}>
+                {property.address}
+              </Text>
+              
+              {/* Status Badge */}
+              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(property.status) + '20' }]}>
+                <View style={[styles.statusDot, { backgroundColor: getStatusColor(property.status) }]} />
+                <Text style={[styles.statusText, { color: getStatusColor(property.status) }]}>
+                  {getStatusLabel(property.status)}
+                </Text>
+              </View>
+              
+              {/* Property Stats */}
+              <View style={styles.cardStats}>
+                <View style={styles.cardStatItem}>
+                  <Text style={styles.cardStatValue}>{String(property.rooms || '—')}</Text>
+                  <Text style={styles.cardStatLabel}>Rooms</Text>
+                </View>
+                <View style={styles.cardStatItem}>
+                  <Text style={styles.cardStatValue}>
+                    {property.square_meters && property.square_meters !== 1
+                      ? `${String(property.square_meters)}m²`
+                      : '—'}
+                  </Text>
+                  <Text style={styles.cardStatLabel}>Size</Text>
+                </View>
+                <View style={styles.cardStatItem}>
+                  <Text style={styles.cardStatValue}>{formatPrice(property.asked_price)}</Text>
+                  <Text style={styles.cardStatLabel}>Price</Text>
+                </View>
+              </View>
+              
+              {/* Actions */}
+              <View style={styles.cardActions}>
+                <TouchableOpacity 
+                  style={styles.viewDetailsButton}
+                  onPress={() => handleMarkerPress(property)}
+                >
+                  <FeatherIcon name="eye" size={16} color="#FFF" />
+                  <Text style={styles.viewDetailsText}>View Details</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.moveButton}
+                  onPress={() => handleStartEditLocation(property.id)}
+                >
+                  <FeatherIcon name="move" size={16} color={theme.colors.primary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )
+      })()}
     </View>
   )
 }
@@ -862,6 +1066,7 @@ const styles = StyleSheet.create({
   calloutContainer: {
     width: 250,
     padding: 12,
+    paddingTop: 32,
     backgroundColor: theme.colors.white,
     borderRadius: 12,
     shadowColor: '#000',
@@ -869,11 +1074,37 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 5,
+    position: 'relative',
+  },
+  calloutCloseButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  calloutActions: {
+    flexDirection: 'row',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  dragHint: {
+    fontSize: 10,
+    color: theme.colors.textMuted,
+    fontFamily: theme.typography.fontFamily,
+    textAlign: 'center',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   newBadge: {
     position: 'absolute',
     top: 8,
-    right: 8,
+    right: 32,
     backgroundColor: '#ef4444',
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -965,5 +1196,181 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 3,
     elevation: 5,
+  },
+  viewDetailsButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primary,
+    height: 48,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+  },
+  viewDetailsText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFF',
+    fontFamily: theme.typography.fontFamily,
+    marginLeft: 6,
+  },
+  editLocationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primary + '15',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.primary + '30',
+  },
+  editLocationText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.colors.primary,
+    fontFamily: theme.typography.fontFamily,
+    marginLeft: 6,
+  },
+  editLocationOverlay: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
+    zIndex: 100,
+  },
+  editLocationBanner: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  editLocationBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  editLocationBannerText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFF',
+    fontFamily: theme.typography.fontFamily,
+    marginLeft: 10,
+    flex: 1,
+  },
+  editLocationCancelButton: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  editLocationCancelText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFF',
+    fontFamily: theme.typography.fontFamily,
+  },
+  // Property Card Styles
+  propertyCard: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    zIndex: 100,
+  },
+  cardDismissArea: {
+    position: 'absolute',
+    top: -1000,
+    left: -1000,
+    right: -1000,
+    bottom: -1000,
+    zIndex: -1,
+  },
+  cardContent: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  cardCloseButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  cardNewBadge: {
+    position: 'absolute',
+    top: 16,
+    left: 20,
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.colors.text,
+    fontFamily: theme.typography.fontFamily,
+    marginTop: 24,
+    marginBottom: 4,
+    paddingRight: 40,
+  },
+  cardAddress: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    fontFamily: theme.typography.fontFamily,
+    marginBottom: 12,
+  },
+  cardStats: {
+    flexDirection: 'row',
+    marginTop: 12,
+    marginBottom: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  cardStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  cardStatValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: theme.colors.text,
+    fontFamily: theme.typography.fontFamily,
+  },
+  cardStatLabel: {
+    fontSize: 11,
+    color: theme.colors.textMuted,
+    fontFamily: theme.typography.fontFamily,
+    marginTop: 2,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  moveButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: theme.colors.primary + '15',
+    borderWidth: 1,
+    borderColor: theme.colors.primary + '30',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 })

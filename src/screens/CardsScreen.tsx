@@ -25,6 +25,7 @@ export default function CardsScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [archivedExpanded, setArchivedExpanded] = useState(false)
 
   const loadProperties = async () => {
     try {
@@ -68,7 +69,7 @@ export default function CardsScreen() {
       {/* Property Count - Minimalist Badge */}
       <View style={styles.countRow}>
         <Text style={styles.countLabel}>
-          {String(relevantProperties.length)} {relevantProperties.length === 1 ? 'Property' : 'Properties'} found
+          {String(relevantProperties.length)} {relevantProperties.length === 1 ? 'relevant property' : 'relevant properties'}
         </Text>
       </View>
 
@@ -122,16 +123,31 @@ export default function CardsScreen() {
             irrelevantProperties.length > 0 ? (
               <View style={styles.irrelevantSection}>
                 <View style={styles.separator} />
-                <Text style={styles.irrelevantTitle}>
-                  Archived ({String(irrelevantProperties.length)})
-                </Text>
-                {irrelevantProperties.map((property) => (
-                  <PropertyCard
-                    key={property.id}
-                    property={property}
-                    onPress={() => handlePropertyPress(property)}
+                <TouchableOpacity
+                  style={styles.archivedHeader}
+                  onPress={() => setArchivedExpanded(!archivedExpanded)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.irrelevantTitle}>
+                    Archived ({String(irrelevantProperties.length)})
+                  </Text>
+                  <FeatherIcon
+                    name={archivedExpanded ? 'chevron-up' : 'chevron-down'}
+                    size={18}
+                    color={theme.colors.textMuted}
                   />
-                ))}
+                </TouchableOpacity>
+                {archivedExpanded && (
+                  <>
+                    {irrelevantProperties.map((property) => (
+                      <PropertyCard
+                        key={property.id}
+                        property={property}
+                        onPress={() => handlePropertyPress(property)}
+                      />
+                    ))}
+                  </>
+                )}
               </View>
             ) : <View style={{ height: 100 }} />
           }
@@ -243,12 +259,17 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.border,
     marginBottom: 24,
   },
+  archivedHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   irrelevantTitle: {
     fontSize: 13,
     fontWeight: '700',
     color: theme.colors.textMuted,
     fontFamily: theme.typography.fontFamily,
-    marginBottom: 16,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },

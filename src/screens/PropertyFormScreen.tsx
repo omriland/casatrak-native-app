@@ -150,7 +150,12 @@ export default function PropertyFormScreen() {
   }
 
   const handleGoBack = () => {
-    navigation.navigate('MainTabs', { screen: 'Home' })
+    if (navigation.canGoBack()) {
+      navigation.goBack()
+    } else {
+      // Fallback in case it's opened without history
+      navigation.navigate('MainTabs', { screen: 'Home' } as any)
+    }
   }
 
   const handleSubmit = async () => {
