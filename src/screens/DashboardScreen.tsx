@@ -6,15 +6,15 @@ import { MaterialTopTabBarProps } from '@react-navigation/material-top-tabs'
 import { useNavigation } from '@react-navigation/native'
 import { theme } from '../theme/theme'
 import CardsScreen from './CardsScreen'
-import KanbanScreen from './KanbanScreen'
 import MapScreen from './MapScreen'
+import StatisticsScreen from './StatisticsScreen'
 import FeatherIcon from 'react-native-vector-icons/Feather'
 import { logout } from '../lib/auth'
 
 export type DashboardTabParamList = {
   Cards: undefined
-  Kanban: undefined
   Map: undefined
+  Statistics: undefined
 }
 
 const TopTab = createMaterialTopTabNavigator<DashboardTabParamList>()
@@ -29,9 +29,9 @@ function CustomTabBar({ state, descriptors, navigation }: MaterialTopTabBarProps
           const label = options.tabBarLabel ?? route.name
           const isFocused = state.index === index
 
-          let iconName: 'list' | 'columns' | 'map' = 'list'
-          if (route.name === 'Kanban') iconName = 'columns'
+          let iconName: 'list' | 'map' | 'bar-chart-2' = 'list'
           if (route.name === 'Map') iconName = 'map'
+          if (route.name === 'Statistics') iconName = 'bar-chart-2'
 
           return (
             <TouchableOpacity
@@ -108,8 +108,8 @@ export default function DashboardScreen() {
           screenOptions={{ swipeEnabled: true }}
         >
           <TopTab.Screen name="Cards" component={CardsScreen} options={{ tabBarLabel: 'Listings' }} />
-          <TopTab.Screen name="Kanban" component={KanbanScreen} options={{ tabBarLabel: 'Board' }} />
           <TopTab.Screen name="Map" component={MapScreen} options={{ tabBarLabel: 'Map View' }} />
+          <TopTab.Screen name="Statistics" component={StatisticsScreen} options={{ tabBarLabel: 'Stats' }} />
         </TopTab.Navigator>
       </View>
     </View>

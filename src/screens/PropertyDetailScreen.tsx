@@ -57,6 +57,7 @@ import {
   deletePropertyAttachment,
   updateProperty,
 } from '../lib/properties'
+import { CONFIG } from '../lib/config'
 import { Note, PropertyStatus, Attachment } from '../types/property'
 
 type NavigationProp = StackNavigationProp<RootStackParamList>
@@ -641,8 +642,12 @@ export default function PropertyDetailScreen() {
 
   const handleShare = async () => {
     try {
-      const message = `${property.title}\nPrice: ${formatPrice(property.asked_price)}\nAddress: ${property.address}\n${property.url || ''}`
-      await Share.share({ message })
+      const shareUrl = `${CONFIG.WEB_APP_URL}?property=${property.id}`
+      const message = `${property.title}\nPrice: ${formatPrice(property.asked_price)}\nAddress: ${property.address}\n\nView on web: ${shareUrl}`
+      await Share.share({ 
+        message,
+        url: shareUrl, // iOS will use this for better sharing options
+      })
     } catch (error) {
       console.log('Error sharing:', error)
     }

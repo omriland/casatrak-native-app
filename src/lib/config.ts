@@ -10,4 +10,7 @@ export const CONFIG = {
   
   // Google Maps API Key (for Android if using Google Maps provider)
   GOOGLE_MAPS_API_KEY: 'AIzaSyCn7QRg4Ny9eHyx2NOqUwXAkDg6IN_msQ0',
+  
+  // Web Application URL (for sharing property links)
+  WEB_APP_URL: 'https://casa-track.netlify.app',
 }
