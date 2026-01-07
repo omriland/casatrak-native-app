@@ -4,6 +4,7 @@ import IonIcon from 'react-native-vector-icons/Ionicons'
 import { theme } from '../theme/theme'
 import { Property } from '../types/property'
 import { getPublicUrl } from '../lib/properties'
+import { getStatusLabel, getStatusColor } from '../constants/statuses'
 
 interface PropertyCardProps {
   property: Property
@@ -56,8 +57,8 @@ export default function PropertyCard({ property, onPress }: PropertyCardProps) {
         </View>
 
         <View style={styles.rightColumn}>
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusText}>{String(property.status).toUpperCase()}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(property.status) + '15' }]}>
+            <Text style={[styles.statusText, { color: getStatusColor(property.status) }]}>{getStatusLabel(property.status)}</Text>
           </View>
           <Stars rating={property.rating} />
         </View>

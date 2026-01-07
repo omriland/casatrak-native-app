@@ -128,15 +128,15 @@ const LIGHT_MAP_STYLE = [
 
 // Get marker color based on status and flagged state (matching web version logic)
 // Note: pinColor only supports 'red', 'green', 'purple' - we use custom marker for grey (irrelevant)
-const getMarkerPinColor = (property: Property): 'red' | 'green' | 'purple' | null => {
+const getMarkerPinColor = (property: Property): string | null => {
   // Irrelevant properties use custom grey marker (return null to use custom view)
   if (property.status === 'Irrelevant') {
     return null // Use custom grey marker instead
   }
 
-  // Flagged properties always get amber/yellow color -> map to 'red' (closest)
+  // Flagged properties always get dark yellow color
   if (property.is_flagged) {
-    return 'red' // Amber/yellow for flagged (closest to red)
+    return '#ca8a04' // Dark yellow for flagged
   }
 
   // Status-based colors (matching web version)
@@ -144,20 +144,20 @@ const getMarkerPinColor = (property: Property): 'red' | 'green' | 'purple' | nul
   const isVisited = property.status === 'Visited'
 
   if (isInterested) {
-    return 'red' // Dark yellow -> red (closest)
+    return '#ca8a04' // Dark yellow
   } else if (isVisited) {
-    return 'purple' // Light blue -> purple (closest)
+    return '#60a5fa' // Light blue
   } else {
-    // Default: primary teal color -> green (closest)
-    return 'green' // Primary teal -> green (closest)
+    // Default: primary teal color
+    return theme.colors.primary
   }
 }
 
 // Get actual color for callout/styling (matching web version exactly)
 const getMarkerColor = (property: Property): string => {
-  // Flagged properties always get amber/yellow color
+  // Flagged properties always get dark yellow color
   if (property.is_flagged) {
-    return '#f59e0b' // Amber/yellow for flagged
+    return '#ca8a04' // Dark yellow for flagged
   }
 
   // Status-based colors (matching web version)
@@ -205,6 +205,51 @@ export default function MapScreen() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null)
   const [editingLocationPropertyId, setEditingLocationPropertyId] = useState<string | null>(null)
   const mapRef = useRef<MapView>(null)
+
+  // Filter properties based on layer settings
+  const visibleProperties = useMemo(() => {
+    return properties.filter(
+      (p) =>
+        (showIrrelevant || p.status !== 'Irrelevant') &&
+        p.status !== 'Purchased' &&
+        p.latitude !== null &&
+        p.longitude !== null
+    )
+  }, [properties, showIrrelevant])
+
+  // All properties with coordinates (for count display)
+  const allPropertiesWithCoords = useMemo(() => {
+    return properties.filter((p) => p.latitude !== null && p.longitude !== null)
+  }, [properties])
+
+  // Calculate map region to fit all visible properties
+  const mapRegion = useMemo((): Region => {
+    if (visibleProperties.length === 0) {
+      return DEFAULT_REGION
+    }
+
+    const latitudes = visibleProperties.map((p) => p.latitude!)
+    const longitudes = visibleProperties.map((p) => p.longitude!)
+
+    const minLat = Math.min(...latitudes)
+    const maxLat = Math.max(...latitudes)
+    const minLng = Math.min(...longitudes)
+    const maxLng = Math.max(...longitudes)
+
+    const centerLat = (minLat + maxLat) / 2
+    const centerLng = (minLng + maxLng) / 2
+
+    // Calculate deltas with padding
+    const latDelta = Math.max(maxLat - minLat, 0.01) * 1.5 // Add 50% padding
+    const lngDelta = Math.max(maxLng - minLng, 0.01) * 1.5 // Add 50% padding
+
+    return {
+      latitude: centerLat,
+      longitude: centerLng,
+      latitudeDelta: Math.max(latDelta, 0.01), // Minimum delta
+      longitudeDelta: Math.max(lngDelta, 0.01), // Minimum delta
+    }
+  }, [visibleProperties])
 
   const loadProperties = async () => {
     try {
@@ -301,7 +346,7 @@ export default function MapScreen() {
             data.elements.forEach((element: any, index: number) => {
               if (element.type === 'node' && element.lat && element.lon) {
                 const routeRefs: string[] = []
-                
+
                 // Extract routes from various tag formats
                 if (element.tags?.route_ref) {
                   // Multiple routes separated by semicolon or comma
@@ -407,7 +452,7 @@ export default function MapScreen() {
 
   const handleMapPress = async (e: any) => {
     if (!editingLocationPropertyId) return
-    
+
     const { latitude, longitude } = e.nativeEvent.coordinate
     const property = properties.find(p => p.id === editingLocationPropertyId)
     if (!property) return
@@ -418,7 +463,7 @@ export default function MapScreen() {
         latitude,
         longitude,
       })
-      
+
       // Update local state
       setProperties((prevProperties) =>
         prevProperties.map((p) =>
@@ -427,7 +472,7 @@ export default function MapScreen() {
             : p
         )
       )
-      
+
       Alert.alert('Success', 'Location updated!')
       setEditingLocationPropertyId(null)
     } catch (error) {
@@ -459,50 +504,6 @@ export default function MapScreen() {
     }
   }
 
-  // Filter properties based on layer settings
-  const visibleProperties = useMemo(() => {
-    return properties.filter(
-      (p) =>
-        (showIrrelevant || p.status !== 'Irrelevant') &&
-        p.status !== 'Purchased' &&
-        p.latitude !== null &&
-        p.longitude !== null
-    )
-  }, [properties, showIrrelevant])
-
-  // All properties with coordinates (for count display)
-  const allPropertiesWithCoords = useMemo(() => {
-    return properties.filter((p) => p.latitude !== null && p.longitude !== null)
-  }, [properties])
-
-  // Calculate map region to fit all visible properties
-  const mapRegion = useMemo((): Region => {
-    if (visibleProperties.length === 0) {
-      return DEFAULT_REGION
-    }
-
-    const latitudes = visibleProperties.map((p) => p.latitude!)
-    const longitudes = visibleProperties.map((p) => p.longitude!)
-
-    const minLat = Math.min(...latitudes)
-    const maxLat = Math.max(...latitudes)
-    const minLng = Math.min(...longitudes)
-    const maxLng = Math.max(...longitudes)
-
-    const centerLat = (minLat + maxLat) / 2
-    const centerLng = (minLng + maxLng) / 2
-
-    // Calculate deltas with padding
-    const latDelta = Math.max(maxLat - minLat, 0.01) * 1.5 // Add 50% padding
-    const lngDelta = Math.max(maxLng - minLng, 0.01) * 1.5 // Add 50% padding
-
-    return {
-      latitude: centerLat,
-      longitude: centerLng,
-      latitudeDelta: Math.max(latDelta, 0.01), // Minimum delta
-      longitudeDelta: Math.max(lngDelta, 0.01), // Minimum delta
-    }
-  }, [visibleProperties])
 
   if (loading) {
     return (
@@ -549,7 +550,7 @@ export default function MapScreen() {
           const markerColor = getMarkerColor(property)
           const showNewBadge = isNewProperty(property.status)
           const isIrrelevant = property.status === 'Irrelevant'
-          
+
           return (
             <Marker
               key={property.id}
@@ -598,7 +599,7 @@ export default function MapScreen() {
                   <Text style={styles.transitCalloutTitle} numberOfLines={2}>
                     {String(station.name || 'Transit Station')}
                   </Text>
-                  
+
                   {/* Bus Lines with Icon */}
                   {station.routes && Array.isArray(station.routes) && station.routes.length > 0 && (
                     <View style={styles.routesContainer}>
@@ -611,7 +612,7 @@ export default function MapScreen() {
                             const colors = ['#8B5CF6', '#D97706', '#8B5CF6', '#D97706'] // Purple and orange-brown
                             const isFirst = idx === 0
                             const routeColor = isFirst ? undefined : colors[(idx - 1) % colors.length]
-                            
+
                             return (
                               <View
                                 key={`route-${idx}-${route}`}
@@ -679,7 +680,7 @@ export default function MapScreen() {
         {isLayerMenuOpen && (
           <View style={styles.layerMenu}>
             <Text style={styles.layerMenuTitle}>Layers</Text>
-            
+
             {/* Show Irrelevant Properties */}
             <TouchableOpacity
               style={[styles.layerMenuItem, showIrrelevant && styles.layerMenuItemActive]}
@@ -733,7 +734,7 @@ export default function MapScreen() {
               <FeatherIcon name="crosshair" size={20} color="#FFF" />
               <Text style={styles.editLocationBannerText}>Tap anywhere on the map to set new location</Text>
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.editLocationCancelButton}
               onPress={handleCancelEditLocation}
             >
@@ -748,42 +749,42 @@ export default function MapScreen() {
         const property = properties.find(p => p.id === selectedPropertyId)
         if (!property) return null
         const showNewBadge = isNewProperty(property.status)
-        
+
         return (
           <View style={[styles.propertyCard, { bottom: Math.max(insets.bottom, 16) + 16 }]}>
             {/* Dismiss overlay */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.cardDismissArea}
               onPress={handleCalloutDismiss}
               activeOpacity={1}
             />
-            
+
             <View style={styles.cardContent}>
               {/* Close Button */}
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.cardCloseButton}
                 onPress={handleCalloutDismiss}
               >
                 <FeatherIcon name="x" size={20} color={theme.colors.textSecondary} />
               </TouchableOpacity>
-              
+
               {/* NEW Badge */}
               {showNewBadge && (
                 <View style={styles.cardNewBadge}>
                   <Text style={styles.newBadgeText}>NEW</Text>
                 </View>
               )}
-              
+
               {/* Property Title */}
               <Text style={styles.cardTitle} numberOfLines={2}>
                 {property.title || property.address || 'Property'}
               </Text>
-              
+
               {/* Address */}
               <Text style={styles.cardAddress} numberOfLines={1}>
                 {property.address}
               </Text>
-              
+
               {/* Status Badge */}
               <View style={[styles.statusBadge, { backgroundColor: getStatusColor(property.status) + '20' }]}>
                 <View style={[styles.statusDot, { backgroundColor: getStatusColor(property.status) }]} />
@@ -791,7 +792,7 @@ export default function MapScreen() {
                   {getStatusLabel(property.status)}
                 </Text>
               </View>
-              
+
               {/* Property Stats */}
               <View style={styles.cardStats}>
                 <View style={styles.cardStatItem}>
@@ -811,17 +812,17 @@ export default function MapScreen() {
                   <Text style={styles.cardStatLabel}>Price</Text>
                 </View>
               </View>
-              
+
               {/* Actions */}
               <View style={styles.cardActions}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.viewDetailsButton}
                   onPress={() => handleMarkerPress(property)}
                 >
                   <FeatherIcon name="eye" size={16} color="#FFF" />
                   <Text style={styles.viewDetailsText}>View Details</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.moveButton}
                   onPress={() => handleStartEditLocation(property.id)}
                 >
@@ -1075,16 +1076,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
     position: 'relative',
-  },
-  calloutCloseButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
   },
   calloutActions: {
     flexDirection: 'row',

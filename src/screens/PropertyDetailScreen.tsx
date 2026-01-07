@@ -15,6 +15,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   ActionSheetIOS,
+  Keyboard,
 } from 'react-native'
 import PagerView from 'react-native-pager-view'
 import { GestureDetector, Gesture } from 'react-native-gesture-handler'
@@ -38,7 +39,8 @@ import {
   launchCamera,
   ImagePickerResponse,
   MediaType,
-  ImagePickerOptions,
+  ImageLibraryOptions,
+  CameraOptions,
 } from 'react-native-image-picker'
 import DocumentPicker, { types, DocumentPickerOptions } from 'react-native-document-picker'
 import { Image as ImageCompressor, Video as VideoCompressor } from 'react-native-compressor'
@@ -59,13 +61,14 @@ import {
 } from '../lib/properties'
 import { CONFIG } from '../lib/config'
 import { Note, PropertyStatus, Attachment } from '../types/property'
+import { PROPERTY_STATUSES, getStatusLabel, getStatusColor } from '../constants/statuses'
 
 type NavigationProp = StackNavigationProp<RootStackParamList>
 type PropertyDetailRouteProp = RouteProp<RootStackParamList, 'PropertyDetail'>
 
-const STATUSES: PropertyStatus[] = ['Seen', 'Interested', 'Contacted Realtor', 'Visited', 'On Hold', 'Irrelevant', 'Purchased']
 
 export default function PropertyDetailScreen() {
+  const scrollRef = React.useRef<ScrollView>(null)
   const insets = useSafeAreaInsets()
   const route = useRoute<PropertyDetailRouteProp>()
   const navigation = useNavigation<NavigationProp>()
@@ -96,10 +99,6 @@ export default function PropertyDetailScreen() {
   const [editingNoteContent, setEditingNoteContent] = useState('')
   const [isSavingNote, setIsSavingNote] = useState(false)
 
-  useEffect(() => {
-    loadNotes()
-    loadAttachments()
-  }, [])
 
   const loadNotes = async () => {
     try {
@@ -116,7 +115,7 @@ export default function PropertyDetailScreen() {
     try {
       const data = await getPropertyAttachments(property.id)
       setAttachments(data)
-      
+
       // Generate thumbnails for videos
       data.forEach(async (att) => {
         if (att.file_type === 'video') {
@@ -126,7 +125,7 @@ export default function PropertyDetailScreen() {
               console.warn('createThumbnail native module is not available')
               return
             }
-            
+
             const url = getPublicUrl(att.file_path)
             const thumbnail = await createThumbnail({
               url,
@@ -233,29 +232,50 @@ export default function PropertyDetailScreen() {
     Alert.alert(
       'Update Status',
       'Select professional progress:',
-      STATUSES.map((s) => ({
-        text: s,
-        onPress: async () => {
-          try {
-            await updatePropertyStatus(property.id, s)
-            setProperty({ ...property, status: s })
-          } catch (error) {
-            Alert.alert('Error', 'Failed to update status')
-          }
-        },
-      }))
+      [
+        ...PROPERTY_STATUSES.map((s) => ({
+          text: getStatusLabel(s),
+          onPress: async () => {
+            try {
+              await updatePropertyStatus(property.id, s)
+              setProperty({ ...property, status: s })
+            } catch (error) {
+              Alert.alert('Error', 'Failed to update status')
+            }
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' }
+      ]
     )
   }
+
+  useEffect(() => {
+    loadNotes()
+    loadAttachments()
+
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      () => {
+        // Delay slightly to ensure keyboard animation is complete and layout updated
+        setTimeout(() => {
+          scrollRef.current?.scrollToEnd({ animated: true })
+        }, 100)
+      }
+    )
+
+    return () => {
+      keyboardDidShowListener.remove()
+    }
+  }, [])
 
   const handleAddFromLibrary = async () => {
     try {
       // Use 'mixed' mediaType to allow both photos and videos
       // Note: Type assertion needed as TypeScript types may not fully support 'mixed'
-      const options: ImagePickerOptions = {
+      const options: ImageLibraryOptions = {
         mediaType: 'mixed' as any,
         quality: 0.8,
         videoQuality: 'medium',
-        allowsEditing: false,
         selectionLimit: 0, // 0 = unlimited selection
         includeBase64: false,
       }
@@ -278,7 +298,7 @@ export default function PropertyDetailScreen() {
 
       if (result.assets && result.assets.length > 0) {
         setUploadingAttachment(true)
-        
+
         try {
           // Process all selected assets
           for (const asset of result.assets) {
@@ -307,7 +327,7 @@ export default function PropertyDetailScreen() {
                     compressionMethod: 'auto',
                     bitrate: 2000000, // 2 Mbps - good balance for mobile viewing
                     maxSize: 1920, // Max resolution
-                    minimumFileSizeForCompression: 0, // Compress all videos
+                    minimumFileSizeForCompress: 0, // Compress all videos
                   })
                   console.log('Video compressed, new URI:', finalUri)
                 } catch (compressError) {
@@ -330,19 +350,19 @@ export default function PropertyDetailScreen() {
                 // Ensure URI is properly formatted
                 const uriToFetch = finalUri.startsWith('file://') ? finalUri : `file://${finalUri}`
                 console.log('Fetching file from URI:', uriToFetch)
-                
+
                 const response = await fetch(uriToFetch)
                 if (!response.ok) {
                   throw new Error(`Failed to read file: ${response.status} ${response.statusText}`)
                 }
-                
+
                 // Read as ArrayBuffer (required for Supabase in React Native)
                 fileArrayBuffer = await response.arrayBuffer()
-                
+
                 if (!fileArrayBuffer || fileArrayBuffer.byteLength === 0) {
                   throw new Error('File ArrayBuffer is empty')
                 }
-                
+
                 compressedSize = fileArrayBuffer.byteLength
                 console.log(`Successfully read file: ${compressedSize} bytes`)
               } catch (readError: any) {
@@ -355,7 +375,7 @@ export default function PropertyDetailScreen() {
               // Determine file extension and type
               const isVideo = asset.type?.startsWith('video/')
               const isImage = asset.type?.startsWith('image/')
-              const fileExtension = asset.fileName?.split('.').pop() || 
+              const fileExtension = asset.fileName?.split('.').pop() ||
                 (isVideo ? 'mp4' : isImage ? 'jpg' : 'bin')
               const fileName = asset.fileName || `media_${Date.now()}.${fileExtension}`
               const fileType = asset.type || (isVideo ? 'video/mp4' : isImage ? 'image/jpeg' : 'application/octet-stream')
@@ -368,10 +388,10 @@ export default function PropertyDetailScreen() {
                 size: compressedSize,
                 arrayBuffer: fileArrayBuffer, // Pass ArrayBuffer directly
               }
-              
+
               const attachment = await uploadPropertyAttachment(property.id, file)
               setAttachments((prev) => [attachment, ...prev])
-              
+
               // Generate thumbnail for new video
               if (attachment.file_type === 'video') {
                 try {
@@ -388,7 +408,7 @@ export default function PropertyDetailScreen() {
                   console.warn('Failed to create thumbnail for new video:', attachment.file_name, e)
                 }
               }
-              
+
               // Show compression info for videos
               if (asset.type?.startsWith('video') && asset.fileSize) {
                 const originalMB = (asset.fileSize / (1024 * 1024)).toFixed(2)
@@ -439,7 +459,7 @@ export default function PropertyDetailScreen() {
         presentationStyle: 'pageSheet' as const,
       }
 
-      const result: ImagePickerResponse = source === 'camera' 
+      const result: ImagePickerResponse = source === 'camera'
         ? await launchCamera(options)
         : await launchImageLibrary(options)
 
@@ -455,7 +475,7 @@ export default function PropertyDetailScreen() {
       if (result.assets && result.assets[0]) {
         const asset = result.assets[0]
         setUploadingAttachment(true)
-        
+
         try {
           let finalUri = asset.uri!
           let compressedSize = asset.fileSize || 0
@@ -477,15 +497,15 @@ export default function PropertyDetailScreen() {
               [],
               { cancelable: false }
             )
-            
+
             try {
               finalUri = await VideoCompressor.compress(asset.uri!, {
                 compressionMethod: 'auto',
                 bitrate: 2000000, // 2 Mbps - good balance for mobile viewing
                 maxSize: 1920, // Max resolution
-                minimumFileSizeForCompression: 0, // Compress all videos
+                minimumFileSizeForCompress: 0, // Compress all videos
               })
-              
+
               // Get compressed file size if available
               try {
                 const response = await fetch(finalUri)
@@ -507,10 +527,10 @@ export default function PropertyDetailScreen() {
             type: asset.type || (mediaType === 'photo' ? 'image/jpeg' : 'video/mp4'),
             size: compressedSize,
           }
-          
+
           const attachment = await uploadPropertyAttachment(property.id, file)
           setAttachments([attachment, ...attachments])
-          
+
           // Generate thumbnail for new video
           if (attachment.file_type === 'video') {
             try {
@@ -527,7 +547,7 @@ export default function PropertyDetailScreen() {
               console.warn('Failed to create thumbnail for new video:', attachment.file_name, e)
             }
           }
-          
+
           // Show compression info for videos
           if (asset.type?.startsWith('video') && asset.fileSize) {
             const originalMB = (asset.fileSize / (1024 * 1024)).toFixed(2)
@@ -618,21 +638,21 @@ export default function PropertyDetailScreen() {
         'Add Attachment',
         'Choose an option:',
         [
-          { 
-            text: 'Choose from Library', 
-            onPress: () => handleAddFromLibrary() 
+          {
+            text: 'Choose from Library',
+            onPress: () => handleAddFromLibrary()
           },
-          { 
-            text: 'Take Photo', 
-            onPress: () => handleAddPhotoOrVideo('photo', 'camera') 
+          {
+            text: 'Take Photo',
+            onPress: () => handleAddPhotoOrVideo('photo', 'camera')
           },
-          { 
-            text: 'Take Video', 
-            onPress: () => handleAddPhotoOrVideo('video', 'camera') 
+          {
+            text: 'Take Video',
+            onPress: () => handleAddPhotoOrVideo('video', 'camera')
           },
-          { 
-            text: 'PDF Document', 
-            onPress: () => handleAddDocument() 
+          {
+            text: 'PDF Document',
+            onPress: () => handleAddDocument()
           },
           { text: 'Cancel', style: 'cancel' },
         ]
@@ -644,7 +664,7 @@ export default function PropertyDetailScreen() {
     try {
       const shareUrl = `${CONFIG.WEB_APP_URL}?property=${property.id}`
       const message = `${property.title}\nPrice: ${formatPrice(property.asked_price)}\nAddress: ${property.address}\n\nView on web: ${shareUrl}`
-      await Share.share({ 
+      await Share.share({
         message,
         url: shareUrl, // iOS will use this for better sharing options
       })
@@ -744,8 +764,8 @@ export default function PropertyDetailScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       <View style={styles.container}>
         {/* Dynamic Header */}
@@ -779,16 +799,20 @@ export default function PropertyDetailScreen() {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.statusPill} onPress={handleUpdateStatus}>
-            <Text style={styles.statusPillText}>{property.status.toUpperCase()}</Text>
+          <TouchableOpacity
+            style={[styles.statusPill, { backgroundColor: getStatusColor(property.status) }]}
+            onPress={handleUpdateStatus}
+          >
+            <Text style={styles.statusPillText}>{getStatusLabel(property.status)}</Text>
             <FeatherIcon name="chevron-down" size={14} color={theme.colors.white} />
           </TouchableOpacity>
         </View>
 
         <ScrollView
+          ref={scrollRef}
           style={styles.content}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 120 }}
+          contentContainerStyle={{ paddingBottom: 150 }} // Increased padding for better scroll range
           keyboardShouldPersistTaps="handled"
         >
           {/* Rating Section */}
@@ -1034,6 +1058,11 @@ export default function PropertyDetailScreen() {
                 value={newNote}
                 onChangeText={setNewNote}
                 multiline
+                onFocus={() => {
+                  setTimeout(() => {
+                    scrollRef.current?.scrollToEnd({ animated: true })
+                  }, 100)
+                }}
               />
               <TouchableOpacity
                 style={[styles.addNoteBtn, !newNote.trim() && styles.disabledBtn]}
@@ -1359,6 +1388,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   specsContainer: {
+    marginTop: 0,
     marginBottom: 16,
   },
   specValue: {
