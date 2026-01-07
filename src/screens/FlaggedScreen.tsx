@@ -6,12 +6,13 @@ import {
   StyleSheet,
   RefreshControl,
   ActivityIndicator,
+  Vibration,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { RootStackParamList } from '../navigation/AppNavigator'
-import { getProperties } from '../lib/properties'
+import { getFlaggedProperties } from '../lib/properties'
 import { Property } from '../types/property'
 import PropertyCard from '../components/PropertyCard'
 import { theme } from '../theme/theme'
@@ -28,9 +29,8 @@ export default function FlaggedScreen() {
 
   const loadProperties = useCallback(async () => {
     try {
-      const data = await getProperties()
-      const flaggedProperties = data.filter((p) => p.is_flagged && p.status !== 'Irrelevant')
-      setProperties(flaggedProperties)
+      const data = await getFlaggedProperties()
+      setProperties(data)
     } catch (error) {
       console.error('Error loading flagged properties:', error)
     } finally {
@@ -44,6 +44,7 @@ export default function FlaggedScreen() {
   }, [loadProperties])
 
   const onRefresh = useCallback(() => {
+    Vibration.vibrate(5) // Even shorter/lighter vibration
     setRefreshing(true)
     loadProperties()
   }, [loadProperties])
@@ -86,7 +87,11 @@ export default function FlaggedScreen() {
           data={properties}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <PropertyCard property={item} onPress={() => handlePropertyPress(item)} />
+            <PropertyCard
+              property={item}
+              onPress={() => handlePropertyPress(item)}
+              customStyle={item.is_flagged ? { backgroundColor: '#FFFDF7', borderColor: '#FEF9E7' } : undefined}
+            />
           )}
           contentContainerStyle={styles.listContent}
           refreshControl={

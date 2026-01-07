@@ -2,13 +2,14 @@ import { View, Text, StyleSheet, TouchableOpacity, Platform, Image } from 'react
 import FeatherIcon from 'react-native-vector-icons/Feather'
 import IonIcon from 'react-native-vector-icons/Ionicons'
 import { theme } from '../theme/theme'
-import { Property } from '../types/property'
+import { Property, Note } from '../types/property'
 import { getPublicUrl } from '../lib/properties'
 import { getStatusLabel, getStatusColor } from '../constants/statuses'
 
 interface PropertyCardProps {
   property: Property
   onPress: () => void
+  customStyle?: any
 }
 
 const formatPrice = (price: number | null) => {
@@ -36,12 +37,12 @@ const Stars = ({ rating }: { rating?: number }) => {
   )
 }
 
-export default function PropertyCard({ property, onPress }: PropertyCardProps) {
+export default function PropertyCard({ property, onPress, customStyle }: PropertyCardProps) {
   const isFlagged = property.is_flagged
 
   return (
     <TouchableOpacity
-      style={[styles.card, isFlagged && styles.cardFlagged]}
+      style={[styles.card, isFlagged && styles.cardFlagged, customStyle]}
       onPress={onPress}
       activeOpacity={0.9}
     >
@@ -80,6 +81,20 @@ export default function PropertyCard({ property, onPress }: PropertyCardProps) {
         <Text style={styles.dot}>•</Text>
         <Text style={[styles.statItem, styles.priceText]}>{formatPrice(property.asked_price)}</Text>
       </View>
+
+      {/* Latest Notes (only if present) */}
+      {property.latest_notes && property.latest_notes.length > 0 && (
+        <View style={styles.notesSection}>
+          {property.latest_notes.map((note) => (
+            <View key={note.id} style={styles.noteLine}>
+              <View style={styles.noteIndicator} />
+              <Text style={styles.noteText} numberOfLines={1}>
+                {note.content}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
     </TouchableOpacity>
   )
 }
@@ -188,5 +203,31 @@ const styles = StyleSheet.create({
     marginHorizontal: 10,
     color: '#CBD5E1',
     fontSize: 12,
+  },
+  notesSection: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.03)',
+    gap: 8,
+  },
+  noteLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  noteIndicator: {
+    width: 3,
+    height: 12,
+    borderRadius: 1.5,
+    backgroundColor: theme.colors.primary + '40',
+  },
+  noteText: {
+    flex: 1,
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    fontFamily: theme.typography.fontFamily,
+    opacity: 0.8,
+    fontStyle: 'italic',
   },
 })

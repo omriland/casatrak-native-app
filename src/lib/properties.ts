@@ -31,6 +31,42 @@ export async function getProperties(): Promise<Property[]> {
     throw error
   }
 }
+export async function getFlaggedProperties(): Promise<Property[]> {
+  try {
+    console.log('Fetching flagged properties with notes from Supabase...')
+    // We select notes and order them by created_at desc, limit is handled in JS for simplicity
+    // but we can try to fetch all and then slice.
+    const { data, error } = await supabase
+      .from('properties')
+      .select('*, attachments(file_path), notes(*)')
+      .eq('is_flagged', true)
+      .neq('status', 'Irrelevant')
+      .order('created_at', { ascending: false })
+      .order('created_at', { foreignTable: 'notes', ascending: false })
+
+    if (error) {
+      console.error('Supabase error:', error)
+      throw error
+    }
+
+    const propertiesWithData = data?.map(p => {
+      const atts = p.attachments as any[] || []
+      const notes = p.notes as any[] || []
+      return {
+        ...p,
+        attachment_count: atts.length,
+        thumbnail_path: atts.length > 0 ? atts[0].file_path : null,
+        latest_notes: notes.slice(0, 2) // Only take the last two notes
+      }
+    }) || []
+
+    return propertiesWithData as Property[]
+  } catch (error: any) {
+    console.error('Error in getFlaggedProperties:', error)
+    throw error
+  }
+}
+
 
 export async function getProperty(id: string): Promise<Property | null> {
   const { data, error } = await supabase
@@ -53,11 +89,11 @@ export async function createProperty(property: PropertyInsert): Promise<Property
     console.error('Error creating property:', error)
     throw error
   }
-  
+
   if (!data || data.length === 0) {
     throw new Error('Property was created but could not be retrieved. Please check your permissions.')
   }
-  
+
   return data[0]
 }
 
@@ -72,11 +108,11 @@ export async function updateProperty(id: string, updates: Partial<PropertyInsert
     console.error('Error updating property:', error)
     throw error
   }
-  
+
   if (!data || data.length === 0) {
     throw new Error('Property was updated but could not be retrieved. Please check your permissions.')
   }
-  
+
   return data[0]
 }
 
@@ -194,7 +230,7 @@ export async function uploadPropertyAttachment(
   try {
     // In React Native, Supabase Storage requires ArrayBuffer, not Blob
     let arrayBuffer: ArrayBuffer
-    
+
     if (file.arrayBuffer) {
       // Use the provided ArrayBuffer (most efficient)
       arrayBuffer = file.arrayBuffer
@@ -204,21 +240,21 @@ export async function uploadPropertyAttachment(
       try {
         // Ensure URI is properly formatted (add file:// if needed for iOS)
         const uri = file.uri.startsWith('file://') ? file.uri : `file://${file.uri}`
-        
+
         const response = await fetch(uri)
         if (!response.ok) {
           throw new Error(`Failed to read file: ${response.status} ${response.statusText}`)
         }
-        
+
         // Convert response to ArrayBuffer directly (more reliable for React Native)
         arrayBuffer = await response.arrayBuffer()
-        
+
         // Verify arrayBuffer has content
         if (!arrayBuffer || arrayBuffer.byteLength === 0) {
           console.error('ArrayBuffer is empty, file URI:', file.uri)
           throw new Error('File ArrayBuffer is empty or invalid')
         }
-        
+
         console.log(`Successfully read file: ${file.name}, size: ${arrayBuffer.byteLength} bytes`)
       } catch (fetchError: any) {
         console.error('Error reading file:', fetchError)
@@ -243,7 +279,7 @@ export async function uploadPropertyAttachment(
     const isPdf = file.type === 'application/pdf'
     const isVideo = file.type?.startsWith('video/')
     const fileType = isPdf ? 'pdf' : (isVideo ? 'video' : 'image')
-    
+
     const attachment: AttachmentInsert = {
       property_id: propertyId,
       file_name: file.name,

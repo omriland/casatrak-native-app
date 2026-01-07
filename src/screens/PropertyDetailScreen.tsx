@@ -715,6 +715,26 @@ export default function PropertyDetailScreen() {
     }).format(price) + ' ₪'
   }
 
+  // Calculate price per m² using the same formula as web version
+  // Formula: effectiveArea = square_meters + (0.5 * balcony_square_meters)
+  const calculatePricePerMeter = () => {
+    const price = property.asked_price
+    const sqMeters = property.square_meters
+    const balcony = property.balcony_square_meters || 0
+
+    if (!price || price === 1 || !sqMeters || sqMeters === 1) {
+      return null
+    }
+
+    const effectiveArea = sqMeters + (0.5 * balcony)
+    if (effectiveArea > 0) {
+      return Math.round(price / effectiveArea)
+    }
+    return null
+  }
+
+  const pricePerMeter = calculatePricePerMeter()
+
   const formatRelativeTime = (dateString: string) => {
     const date = new Date(dateString)
     const now = new Date()
@@ -841,6 +861,14 @@ export default function PropertyDetailScreen() {
             <View style={[styles.card, { flex: 1 }]}>
               <Text style={styles.cardLabel}>Asking Price</Text>
               <Text style={styles.specValue}>{formatPrice(property.asked_price)}</Text>
+              {pricePerMeter !== null && (
+                <Text style={styles.pricePerMeter}>
+                  {new Intl.NumberFormat('he-IL', {
+                    style: 'decimal',
+                    maximumFractionDigits: 0,
+                  }).format(pricePerMeter)} ₪/m²
+                </Text>
+              )}
             </View>
           </View>
           <View style={styles.row}>
@@ -1397,6 +1425,13 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontFamily: theme.typography.fontFamily,
     marginTop: 4,
+  },
+  pricePerMeter: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+    fontFamily: theme.typography.fontFamily,
+    marginTop: 6,
   },
   row: {
     flexDirection: 'row',

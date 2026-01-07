@@ -7,6 +7,7 @@ import {
   RefreshControl,
   TouchableOpacity,
   ActivityIndicator,
+  Vibration,
 } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
@@ -45,6 +46,7 @@ export default function CardsScreen() {
   }, [])
 
   const onRefresh = useCallback(() => {
+    Vibration.vibrate(5) // Even shorter/lighter vibration
     setRefreshing(true)
     loadProperties()
   }, [])
