@@ -96,9 +96,17 @@ export default function DashboardScreen() {
         <View>
           <Text style={styles.titleText}>CasaTrack</Text>
         </View>
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-          <FeatherIcon name="log-out" size={20} color={theme.colors.textSecondary} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={() => (navigation as any).navigate('PropertyForm', {})}
+            style={styles.actionButton}
+          >
+            <FeatherIcon name="plus" size={22} color={theme.colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleLogout} style={styles.actionButton}>
+            <FeatherIcon name="log-out" size={20} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Main Content Area */}
@@ -169,11 +177,17 @@ const styles = StyleSheet.create({
   tabLabelActive: {
     color: theme.colors.white,
   },
-  logoutButton: {
+  headerActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionButton: {
     padding: 8,
-    borderRadius: 8,
+    borderRadius: 10,
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 })

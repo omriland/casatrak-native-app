@@ -7,10 +7,10 @@ import { theme } from '../theme/theme'
 import FeatherIcon from 'react-native-vector-icons/Feather'
 
 import DashboardScreen from '../screens/DashboardScreen'
-import AddScreen from '../screens/AddScreen'
 import FlaggedScreen from '../screens/FlaggedScreen'
 import PropertyDetailScreen from '../screens/PropertyDetailScreen'
 import PropertyFormScreen from '../screens/PropertyFormScreen'
+import PriceCalculatorScreen from '../screens/PriceCalculatorScreen'
 import { Property } from '../types/property'
 
 // Define navigation types
@@ -22,7 +22,7 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   Home: undefined
-  Add: undefined
+  Calculator: undefined
   Flagged: undefined
 }
 
@@ -41,20 +41,11 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           const { options } = descriptors[route.key]
           const isFocused = state.index === index
 
-          if (route.name === 'Add') {
-            return (
-              <TouchableOpacity
-                key={route.key}
-                onPress={() => navigation.navigate('PropertyForm' as any, {})}
-                activeOpacity={0.9}
-                style={styles.prominentButton}
-              >
-                <FeatherIcon name="plus" size={28} color={theme.colors.white} />
-              </TouchableOpacity>
-            )
-          }
 
-          let iconName: 'home' | 'bookmark' = route.name === 'Home' ? 'home' : 'bookmark'
+          let iconName: 'home' | 'calculate' | 'bookmark' = 'home'
+          if (route.name === 'Calculator') iconName = 'calculate'
+          else if (route.name === 'Flagged') iconName = 'bookmark'
+
           const color = isFocused ? theme.colors.primary : theme.colors.textMuted
 
           return (
@@ -64,7 +55,13 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               style={styles.tabItem}
               activeOpacity={0.7}
             >
-              <FeatherIcon name={iconName} size={24} color={color} />
+              {route.name === 'Calculator' ? (
+                <View style={{ marginBottom: -2 }}>
+                  <FeatherIcon name="percent" size={22} color={color} />
+                </View>
+              ) : (
+                <FeatherIcon name={iconName === 'calculate' ? 'percent' : iconName} size={24} color={color} />
+              )}
               {isFocused && <View style={styles.activeDot} />}
             </TouchableOpacity>
           )
@@ -83,7 +80,7 @@ function MainTabs() {
       }}
     >
       <Tab.Screen name="Home" component={DashboardScreen} />
-      <Tab.Screen name="Add" component={AddScreen} />
+      <Tab.Screen name="Calculator" component={PriceCalculatorScreen} />
       <Tab.Screen name="Flagged" component={FlaggedScreen} />
     </Tab.Navigator>
   )
@@ -138,17 +135,20 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     marginTop: 4,
   },
-  prominentButton: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+  fab: {
+    position: 'absolute',
+    right: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowRadius: 6,
+    elevation: 6,
+    zIndex: 999,
   },
 })
