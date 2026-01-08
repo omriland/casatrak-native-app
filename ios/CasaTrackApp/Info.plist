@@ -57,6 +57,17 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>casatrack</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>com.casatrackapp</string>
+		</dict>
+	</array>
 	<key>UIAppFonts</key>
 	<array>
 		<string>VarelaRound-Regular.ttf</string>

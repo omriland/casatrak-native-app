@@ -18,16 +18,12 @@ import {
   Keyboard,
 } from 'react-native'
 import PagerView from 'react-native-pager-view'
-import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps'
-import LinearGradient from 'react-native-linear-gradient'
 import { GestureDetector, Gesture } from 'react-native-gesture-handler'
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
   runOnJS,
-  interpolate,
-  Extrapolation,
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native'
@@ -67,100 +63,6 @@ import { CONFIG } from '../lib/config'
 import { Note, PropertyStatus, Attachment } from '../types/property'
 import { PROPERTY_STATUSES, getStatusLabel, getStatusColor } from '../constants/statuses'
 
-const LIGHT_MAP_STYLE = [
-  {
-    elementType: 'geometry',
-    stylers: [{ color: '#f5f5f5' }],
-  },
-  {
-    elementType: 'labels.icon',
-    stylers: [{ visibility: 'off' }],
-  },
-  {
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#616161' }],
-  },
-  {
-    elementType: 'labels.text.stroke',
-    stylers: [{ color: '#f5f5f5' }],
-  },
-  {
-    featureType: 'administrative.land_parcel',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#bdbdbd' }],
-  },
-  {
-    featureType: 'administrative.neighborhood',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#757575' }],
-  },
-  {
-    featureType: 'poi',
-    elementType: 'geometry',
-    stylers: [{ color: '#eeeeee' }],
-  },
-  {
-    featureType: 'poi',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#757575' }],
-  },
-  {
-    featureType: 'poi.park',
-    elementType: 'geometry',
-    stylers: [{ color: '#e5e5e5' }],
-  },
-  {
-    featureType: 'poi.park',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#9e9e9e' }],
-  },
-  {
-    featureType: 'road',
-    elementType: 'geometry',
-    stylers: [{ color: '#ffffff' }],
-  },
-  {
-    featureType: 'road.arterial',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#757575' }],
-  },
-  {
-    featureType: 'road.highway',
-    elementType: 'geometry',
-    stylers: [{ color: '#dadada' }],
-  },
-  {
-    featureType: 'road.highway',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#616161' }],
-  },
-  {
-    featureType: 'road.local',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#9e9e9e' }],
-  },
-  {
-    featureType: 'transit.line',
-    elementType: 'geometry',
-    stylers: [{ color: '#e5e5e5' }],
-  },
-  {
-    featureType: 'transit.station',
-    elementType: 'geometry',
-    stylers: [{ color: '#eeeeee' }],
-  },
-  {
-    featureType: 'water',
-    elementType: 'geometry',
-    stylers: [{ color: '#c9c9c9' }],
-  },
-  {
-    featureType: 'water',
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#9e9e9e' }],
-  },
-]
-
 type NavigationProp = StackNavigationProp<RootStackParamList>
 type PropertyDetailRouteProp = RouteProp<RootStackParamList, 'PropertyDetail'>
 
@@ -171,23 +73,6 @@ export default function PropertyDetailScreen() {
   const navigation = useNavigation<NavigationProp>()
   const route = useRoute<PropertyDetailRouteProp>()
   const { property: initialPropertyData } = route.params
-
-  // Header Animation
-  const headerHeight = useSharedValue(180)
-  const startHeaderHeight = useSharedValue(180)
-
-  const headerPanGesture = Gesture.Pan()
-    .onBegin(() => {
-      startHeaderHeight.value = headerHeight.value
-    })
-    .onUpdate((event) => {
-      const newHeight = startHeaderHeight.value + event.translationY
-      headerHeight.value = Math.min(Math.max(newHeight, 180), 500)
-    })
-
-  const animatedHeaderStyle = useAnimatedStyle(() => ({
-    height: headerHeight.value,
-  }))
 
   const [property, setProperty] = useState(initialPropertyData)
   const [notes, setNotes] = useState<Note[]>([])
@@ -903,96 +788,45 @@ export default function PropertyDetailScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       <View style={styles.container}>
-        {/* Dynamic Header */}
-        <Animated.View style={[styles.header, animatedHeaderStyle, { paddingTop: Math.max(insets.top, 16) }]}>
-          {property.latitude && property.longitude && (
-            <View style={StyleSheet.absoluteFill}>
-              <MapView
-                provider={PROVIDER_DEFAULT}
-                style={StyleSheet.absoluteFill}
-                scrollEnabled={headerHeight.value > 185}
-                zoomEnabled={headerHeight.value > 185}
-                rotateEnabled={headerHeight.value > 185}
-                pitchEnabled={headerHeight.value > 185}
-                initialRegion={{
-                  latitude: property.latitude,
-                  longitude: property.longitude,
-                  latitudeDelta: 0.01,
-                  longitudeDelta: 0.01,
-                }}
-                customMapStyle={LIGHT_MAP_STYLE}
-              >
-                <Marker
-                  coordinate={{
-                    latitude: property.latitude,
-                    longitude: property.longitude,
-                  }}
-                  tracksViewChanges={false}
-                >
-                  <View style={styles.headerMarker}>
-                    <View style={styles.headerMarkerInner} />
-                  </View>
-                </Marker>
-              </MapView>
-              <LinearGradient
-                colors={['rgba(0,0,0,0.85)', 'rgba(0,0,0,0.4)', 'transparent']}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: 240,
-                }}
-              />
-            </View>
-          )}
-          <View>
-            <View style={styles.headerTop}>
-              <View style={styles.titleInfo}>
-                <Text style={styles.headerTitle} numberOfLines={1}>
-                  {property.title || 'Untitled Property'}
+        {/* Header */}
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
+          <View style={styles.headerTop}>
+            <View style={styles.titleInfo}>
+              <Text style={styles.headerTitle} numberOfLines={1}>
+                {property.title || 'Untitled Property'}
+              </Text>
+              <View style={styles.headerLocationRow}>
+                <FeatherIcon name="map-pin" size={12} color="rgba(255,255,255,0.7)" />
+                <Text style={styles.headerLocationText} numberOfLines={1}>
+                  {property.address}
                 </Text>
-                <View style={styles.headerLocationRow}>
-                  <FeatherIcon name="map-pin" size={12} color="rgba(255,255,255,0.7)" />
-                  <Text style={styles.headerLocationText} numberOfLines={1}>
-                    {property.address}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.headerActions}>
-                <TouchableOpacity onPress={handleToggleFlag} style={styles.iconButton}>
-                  <FeatherIcon
-                    name="flag"
-                    size={18}
-                    color={property.is_flagged ? theme.colors.accent : theme.colors.white}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleShare} style={styles.iconButton}>
-                  <FeatherIcon name="share-2" size={18} color={theme.colors.white} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconButton}>
-                  <FeatherIcon name="x" size={20} color={theme.colors.white} />
-                </TouchableOpacity>
               </View>
             </View>
-
-            <TouchableOpacity
-              style={[styles.statusPill, { backgroundColor: getStatusColor(property.status) }]}
-              onPress={handleUpdateStatus}
-            >
-              <Text style={styles.statusPillText}>{getStatusLabel(property.status)}</Text>
-              <FeatherIcon name="chevron-down" size={14} color={theme.colors.white} />
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              <TouchableOpacity onPress={handleToggleFlag} style={styles.iconButton}>
+                <FeatherIcon
+                  name="flag"
+                  size={18}
+                  color={property.is_flagged ? theme.colors.accent : theme.colors.white}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleShare} style={styles.iconButton}>
+                <FeatherIcon name="share-2" size={18} color={theme.colors.white} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconButton}>
+                <FeatherIcon name="x" size={20} color={theme.colors.white} />
+              </TouchableOpacity>
+            </View>
           </View>
 
-          <View style={styles.headerBottomArea}>
-            <GestureDetector gesture={headerPanGesture}>
-              <View style={styles.dragHandleArea}>
-                <View style={styles.dragHandle} />
-              </View>
-            </GestureDetector>
-          </View>
-        </Animated.View>
+          <TouchableOpacity
+            style={[styles.statusPill, { backgroundColor: getStatusColor(property.status) }]}
+            onPress={handleUpdateStatus}
+          >
+            <Text style={styles.statusPillText}>{getStatusLabel(property.status)}</Text>
+            <FeatherIcon name="chevron-down" size={14} color={theme.colors.white} />
+          </TouchableOpacity>
+        </View>
 
         <ScrollView
           ref={scrollRef}
@@ -1489,10 +1323,8 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 24,
-    paddingBottom: 16,
+    paddingBottom: 20,
     backgroundColor: theme.colors.primary,
-    overflow: 'hidden',
-    justifyContent: 'space-between',
   },
   headerTop: {
     flexDirection: 'row',
@@ -1529,27 +1361,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  headerMarker: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerMarkerInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#FFF',
-    borderWidth: 2,
-    borderColor: '#000',
   },
   statusPill: {
     flexDirection: 'row',
@@ -1559,25 +1373,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 12,
     alignSelf: 'flex-start',
-  },
-  headerBottomArea: {
-    paddingBottom: 8,
-    alignItems: 'center',
-  },
-  dragHandleArea: {
-    height: 30,
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dragHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.4)',
-    borderRadius: 2,
   },
   statusPillText: {
     color: theme.colors.white,

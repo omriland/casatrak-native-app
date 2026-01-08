@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { StatusBar, ActivityIndicator, View, StyleSheet, AppState } from 'react-native'
+import { StatusBar, ActivityIndicator, View, StyleSheet, AppState, Linking } from 'react-native'
 import { NavigationContainer } from '@react-navigation/native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
@@ -9,6 +9,7 @@ import LoginScreen from './src/screens/LoginScreen'
 import { isAuthenticated } from './src/lib/auth'
 import { theme } from './src/theme/theme'
 import { navigationRef } from './src/lib/navigation'
+import { handleDeepLink, parseDeepLink } from './src/lib/linking'
 import { LogBox } from 'react-native'
 
 // Ignore specific deprecation warnings from libraries
@@ -34,6 +35,35 @@ export default function App() {
       subscription.remove()
     }
   }, [])
+
+  // Handle deep links when app is already running
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      if (loggedIn) {
+        handleDeepLink(url)
+      }
+    })
+
+    return () => {
+      subscription.remove()
+    }
+  }, [loggedIn])
+
+  // Handle initial deep link (when app is opened from a link)
+  useEffect(() => {
+    if (loggedIn) {
+      const handleInitialLink = async () => {
+        const initialUrl = await Linking.getInitialURL()
+        if (initialUrl) {
+          // Small delay to ensure navigation is ready
+          setTimeout(() => {
+            handleDeepLink(initialUrl)
+          }, 500)
+        }
+      }
+      handleInitialLink()
+    }
+  }, [loggedIn])
 
   const checkAuth = async () => {
     try {
