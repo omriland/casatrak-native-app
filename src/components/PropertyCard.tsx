@@ -3,13 +3,16 @@ import FeatherIcon from 'react-native-vector-icons/Feather'
 import IonIcon from 'react-native-vector-icons/Ionicons'
 import { theme } from '../theme/theme'
 import { Property, Note } from '../types/property'
-import { getPublicUrl } from '../lib/properties'
+import { getPublicUrl, formatAddress } from '../lib/properties'
 import { getStatusLabel, getStatusColor } from '../constants/statuses'
+import { Visit } from '../types/visit'
+import { getVisitStatusLabel, getVisitStatusColor } from '../constants/visits'
 
 interface PropertyCardProps {
   property: Property
   onPress: () => void
   customStyle?: any
+  upcomingVisits?: Visit[]
 }
 
 const formatPrice = (price: number | null) => {
@@ -37,7 +40,31 @@ const Stars = ({ rating }: { rating?: number }) => {
   )
 }
 
-export default function PropertyCard({ property, onPress, customStyle }: PropertyCardProps) {
+const formatVisitDate = (isoString: string) => {
+  const date = new Date(isoString)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const visitDate = new Date(date)
+  visitDate.setHours(0, 0, 0, 0)
+
+  const diffDays = Math.floor((visitDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+
+  if (diffDays === 0) return 'Today'
+  if (diffDays === 1) return 'Tomorrow'
+  if (diffDays === 2) return 'Day after tomorrow'
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+const formatVisitTime = (isoString: string) => {
+  const date = new Date(isoString)
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
+export default function PropertyCard({ property, onPress, customStyle, upcomingVisits = [] }: PropertyCardProps) {
   const isFlagged = property.is_flagged
 
   return (
@@ -68,7 +95,7 @@ export default function PropertyCard({ property, onPress, customStyle }: Propert
       {/* Middle Section: Address */}
       <View style={styles.addressRow}>
         <FeatherIcon name="map-pin" size={14} color="#64748B" style={styles.pinIcon} />
-        <Text style={styles.addressText} numberOfLines={1}>{property.address}</Text>
+        <Text style={styles.addressText} numberOfLines={1}>{formatAddress(property.address)}</Text>
       </View>
 
       {/* Bottom Section: Stats Strip */}
@@ -91,6 +118,30 @@ export default function PropertyCard({ property, onPress, customStyle }: Propert
               <Text style={styles.noteText} numberOfLines={1}>
                 {note.content}
               </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Upcoming Visits (only if present) */}
+      {upcomingVisits && upcomingVisits.length > 0 && (
+        <View style={styles.visitsSection}>
+          {upcomingVisits.map((visit) => (
+            <View key={visit.id} style={styles.visitLine}>
+              <View style={[styles.visitIndicator, { backgroundColor: getVisitStatusColor(visit.status) + '40' }]} />
+              <View style={styles.visitContent}>
+                <View style={styles.visitHeader}>
+                  <FeatherIcon name="calendar" size={12} color={theme.colors.textSecondary} />
+                  <Text style={styles.visitDateText}>
+                    {formatVisitDate(visit.scheduled_at)} • {formatVisitTime(visit.scheduled_at)}
+                  </Text>
+                </View>
+                {visit.notes && (
+                  <Text style={styles.visitNotesText} numberOfLines={1}>
+                    {visit.notes}
+                  </Text>
+                )}
+              </View>
             </View>
           ))}
         </View>
@@ -229,5 +280,47 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     opacity: 0.8,
     fontStyle: 'italic',
+  },
+  visitsSection: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.03)',
+    gap: 8,
+  },
+  visitLine: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  visitIndicator: {
+    width: 3,
+    height: 12,
+    borderRadius: 1.5,
+    marginTop: 2,
+  },
+  visitContent: {
+    flex: 1,
+  },
+  visitHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  visitDateText: {
+    flex: 1,
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    fontFamily: theme.typography.fontFamily,
+    fontWeight: '600',
+  },
+  visitNotesText: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    fontFamily: theme.typography.fontFamily,
+    opacity: 0.7,
+    fontStyle: 'italic',
+    marginLeft: 18,
   },
 })

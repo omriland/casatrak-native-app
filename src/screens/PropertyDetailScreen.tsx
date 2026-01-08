@@ -18,6 +18,7 @@ import {
   Keyboard,
   Animated as RNAnimated,
 } from 'react-native'
+import RNCalendarEvents from 'react-native-calendar-events'
 import PagerView from 'react-native-pager-view'
 import { Swipeable, Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, {
@@ -59,6 +60,7 @@ import {
   getPublicUrl,
   deletePropertyAttachment,
   updateProperty,
+  formatAddress,
 } from '../lib/properties'
 import { CONFIG } from '../lib/config'
 import { Note, PropertyStatus, Attachment } from '../types/property'
@@ -76,6 +78,7 @@ interface SwipeableVisitItemProps {
   formatVisitTime: (isoString: string) => string
   onPress: () => void
   onDelete: () => void
+  onAddToCalendar: () => void
   onLongPress: () => void
   isPast?: boolean
 }
@@ -86,10 +89,43 @@ function SwipeableVisitItem({
   formatVisitTime,
   onPress,
   onDelete,
+  onAddToCalendar,
   onLongPress,
   isPast = false,
 }: SwipeableVisitItemProps) {
   const swipeableRef = useRef<Swipeable>(null)
+
+  const renderLeftActions = (
+    progress: RNAnimated.AnimatedInterpolation<number>,
+    dragX: RNAnimated.AnimatedInterpolation<number>
+  ) => {
+    const trans = dragX.interpolate({
+      inputRange: [0, 100],
+      outputRange: [-80, 0],
+      extrapolate: 'clamp',
+    })
+
+    const scale = dragX.interpolate({
+      inputRange: [0, 40, 80],
+      outputRange: [0, 0.8, 1],
+      extrapolate: 'clamp',
+    })
+
+    return (
+      <View style={styles.calendarAction}>
+        <RNAnimated.View
+          style={[
+            styles.calendarButtonInner,
+            {
+              transform: [{ translateX: trans }, { scale }],
+            },
+          ]}
+        >
+          <FeatherIcon name="calendar" size={24} color={theme.colors.white} />
+        </RNAnimated.View>
+      </View>
+    )
+  }
 
   const renderRightActions = (
     progress: RNAnimated.AnimatedInterpolation<number>,
@@ -127,15 +163,21 @@ function SwipeableVisitItem({
     <View style={styles.visitItemWrapper}>
       <Swipeable
         ref={swipeableRef}
+        renderLeftActions={renderLeftActions}
         renderRightActions={renderRightActions}
         onSwipeableOpen={(direction) => {
           if (direction === 'right') {
             onDelete()
             swipeableRef.current?.close()
+          } else if (direction === 'left') {
+            onAddToCalendar()
+            swipeableRef.current?.close()
           }
         }}
+        leftThreshold={100}
         rightThreshold={100}
         friction={2}
+        overshootLeft={true}
         overshootRight={true}
       >
         <View style={[styles.visitCard, isPast && styles.pastVisitCard]}>
@@ -463,6 +505,32 @@ export default function PropertyDetailScreen() {
         ],
         { cancelable: true }
       )
+    }
+  }
+
+  const handleAddToCalendar = async (visit: Visit) => {
+    try {
+      const authStatus = await RNCalendarEvents.requestPermissions()
+
+      if (authStatus === 'authorized') {
+        const title = `Meeting at ${property.title || property.address || 'Property'}`
+        const startDate = new Date(visit.scheduled_at)
+        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000)
+
+        await RNCalendarEvents.saveEvent(title, {
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          location: property.address || '',
+          notes: visit.notes || '',
+        })
+
+        Alert.alert('Success', 'Event added to your native calendar')
+      } else {
+        Alert.alert('Permission Denied', 'Please enable calendar access in settings to use this feature.')
+      }
+    } catch (error) {
+      console.error('Error adding to calendar:', error)
+      Alert.alert('Error', 'Failed to add event to calendar')
     }
   }
 
@@ -1031,7 +1099,7 @@ export default function PropertyDetailScreen() {
               <View style={styles.headerLocationRow}>
                 <FeatherIcon name="map-pin" size={12} color="rgba(255,255,255,0.7)" />
                 <Text style={styles.headerLocationText} numberOfLines={1}>
-                  {property.address}
+                  {formatAddress(property.address)}
                 </Text>
               </View>
             </View>
@@ -1219,7 +1287,11 @@ export default function PropertyDetailScreen() {
               <View style={styles.contactIcon}>
                 <FeatherIcon name="user" size={18} color={theme.colors.textSecondary} />
               </View>
-              <Text style={styles.contactText}>{property.contact_name || 'No contact name'}</Text>
+              <View style={{ flex: 1, height: 36, justifyContent: 'center' }}>
+                <Text style={styles.contactText}>
+                  {property.contact_name || 'No contact name'}
+                </Text>
+              </View>
             </View>
             {property.contact_phone && (
               <View style={styles.contactRow}>
@@ -1233,7 +1305,7 @@ export default function PropertyDetailScreen() {
                       Linking.openURL(`tel:${phoneNumber}`)
                     }
                   }}
-                  style={{ flex: 1, justifyContent: 'center' }}
+                  style={{ flex: 1, height: 36, justifyContent: 'center' }}
                 >
                   <Text style={[styles.contactText, styles.contactPhoneLink]}>
                     {property.contact_phone}
@@ -1290,6 +1362,7 @@ export default function PropertyDetailScreen() {
                   formatVisitTime={formatVisitTime}
                   onPress={() => navigation.navigate('VisitForm', { visit })}
                   onDelete={() => handleDeleteVisit(visit.id)}
+                  onAddToCalendar={() => handleAddToCalendar(visit)}
                   onLongPress={() => handleChangeVisitStatus(visit)}
                 />
               ))
@@ -1306,6 +1379,7 @@ export default function PropertyDetailScreen() {
                     formatVisitTime={formatVisitTime}
                     onPress={() => navigation.navigate('VisitForm', { visit })}
                     onDelete={() => handleDeleteVisit(visit.id)}
+                    onAddToCalendar={() => handleAddToCalendar(visit)}
                     onLongPress={() => handleChangeVisitStatus(visit)}
                     isPast={true}
                   />
@@ -1318,6 +1392,7 @@ export default function PropertyDetailScreen() {
                     formatVisitTime={formatVisitTime}
                     onPress={() => navigation.navigate('VisitForm', { visit })}
                     onDelete={() => handleDeleteVisit(visit.id)}
+                    onAddToCalendar={() => handleAddToCalendar(visit)}
                     onLongPress={() => handleChangeVisitStatus(visit)}
                     isPast={true}
                   />
@@ -1833,7 +1908,6 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   contactText: {
-    flex: 1,
     fontSize: 16,
     color: theme.colors.text,
     fontFamily: theme.typography.fontFamily,
@@ -2168,6 +2242,19 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     flex: 1,
     borderRadius: 12,
+  },
+  calendarAction: {
+    backgroundColor: theme.colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    flex: 1,
+    borderRadius: 12,
+  },
+  calendarButtonInner: {
+    width: 80,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   deleteButtonInner: {
     width: 80,

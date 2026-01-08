@@ -12,6 +12,7 @@ import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { RootStackParamList } from '../navigation/AppNavigator'
 import { getProperties } from '../lib/properties'
+import { getUpcomingVisitsByProperty } from '../lib/visits'
 import { Property } from '../types/property'
 import PropertyCard from '../components/PropertyCard'
 
@@ -22,6 +23,7 @@ export default function SearchScreen() {
   const navigation = useNavigation<NavigationProp>()
   const [searchQuery, setSearchQuery] = useState('')
   const [properties, setProperties] = useState<Property[]>([])
+  const [visitsByProperty, setVisitsByProperty] = useState<Record<string, any[]>>({})
   const [loading, setLoading] = useState(false)
 
   React.useEffect(() => {
@@ -31,8 +33,12 @@ export default function SearchScreen() {
   const loadProperties = async () => {
     try {
       setLoading(true)
-      const data = await getProperties()
-      setProperties(data)
+      const [propertiesData, visitsData] = await Promise.all([
+        getProperties(),
+        getUpcomingVisitsByProperty(),
+      ])
+      setProperties(propertiesData)
+      setVisitsByProperty(visitsData)
     } catch (error) {
       console.error('Error loading properties:', error)
     } finally {
@@ -81,7 +87,11 @@ export default function SearchScreen() {
           data={filteredProperties}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <PropertyCard property={item} onPress={() => handlePropertyPress(item)} />
+            <PropertyCard
+              property={item}
+              onPress={() => handlePropertyPress(item)}
+              upcomingVisits={visitsByProperty[item.id] || []}
+            />
           )}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={

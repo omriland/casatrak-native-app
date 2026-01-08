@@ -13,6 +13,7 @@ import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { RootStackParamList } from '../navigation/AppNavigator'
 import { getFlaggedProperties } from '../lib/properties'
+import { getUpcomingVisitsByProperty } from '../lib/visits'
 import { Property } from '../types/property'
 import PropertyCard from '../components/PropertyCard'
 import { theme } from '../theme/theme'
@@ -24,13 +25,18 @@ export default function FlaggedScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NavigationProp>()
   const [properties, setProperties] = useState<Property[]>([])
+  const [visitsByProperty, setVisitsByProperty] = useState<Record<string, any[]>>({})
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
   const loadProperties = useCallback(async () => {
     try {
-      const data = await getFlaggedProperties()
-      setProperties(data)
+      const [propertiesData, visitsData] = await Promise.all([
+        getFlaggedProperties(),
+        getUpcomingVisitsByProperty(),
+      ])
+      setProperties(propertiesData)
+      setVisitsByProperty(visitsData)
     } catch (error) {
       console.error('Error loading flagged properties:', error)
     } finally {
@@ -91,6 +97,7 @@ export default function FlaggedScreen() {
               property={item}
               onPress={() => handlePropertyPress(item)}
               customStyle={item.is_flagged ? { backgroundColor: '#FFFDF7', borderColor: '#FEF9E7' } : undefined}
+              upcomingVisits={visitsByProperty[item.id] || []}
             />
           )}
           contentContainerStyle={styles.listContent}

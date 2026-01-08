@@ -22,7 +22,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated'
 import { RootStackParamList } from '../navigation/AppNavigator'
-import { getProperties, updatePropertyStatus } from '../lib/properties'
+import { getProperties, updatePropertyStatus, formatAddress } from '../lib/properties'
 import { Property, PropertyStatus } from '../types/property'
 import { PROPERTY_STATUSES, PROPERTY_STATUS_LABELS, getStatusColor } from '../constants/statuses'
 import { theme } from '../theme/theme'
@@ -86,9 +86,9 @@ function KanbanCard({ property, onPress, onDragStart, isDragging }: KanbanCardPr
           {property.title || property.address}
         </Text>
         <Text style={styles.cardAddress} numberOfLines={1}>
-          {property.address}
+          {formatAddress(property.address)}
         </Text>
-        
+
         <View style={styles.cardStats}>
           {property.rooms > 0 && (
             <Text style={styles.cardStat}>{String(property.rooms)}</Text>
@@ -97,11 +97,11 @@ function KanbanCard({ property, onPress, onDragStart, isDragging }: KanbanCardPr
             <Text style={styles.cardStat}>{String(property.square_meters)}m²</Text>
           )}
         </View>
-        
+
         {property.asked_price !== null && property.asked_price !== 1 && (
           <Text style={styles.cardPrice}>{formatPrice(property.asked_price)}</Text>
         )}
-        
+
         {property.is_flagged && (
           <View style={styles.flaggedBadge}>
             <FeatherIcon name="bookmark" size={10} color={theme.colors.primary} />
@@ -122,7 +122,7 @@ export default function KanbanScreen() {
   const [columnLayouts, setColumnLayouts] = useState<Record<string, { x: number; width: number }>>({})
   const [scrollX, setScrollX] = useState(0)
   const scrollViewRef = useRef<ScrollView>(null)
-  
+
   const dragX = useSharedValue(0)
   const dragY = useSharedValue(0)
   const dragScale = useSharedValue(1)
@@ -328,7 +328,7 @@ export default function KanbanScreen() {
                     {draggingProperty.title || draggingProperty.address}
                   </Text>
                   <Text style={styles.dragCardAddress} numberOfLines={1}>
-                    {draggingProperty.address}
+                    {formatAddress(draggingProperty.address)}
                   </Text>
                 </View>
               </Animated.View>

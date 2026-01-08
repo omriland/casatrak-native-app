@@ -15,6 +15,7 @@ import { theme } from '../theme/theme'
 import PropertyCard from '../components/PropertyCard'
 import { Property } from '../types/property'
 import { getProperties } from '../lib/properties'
+import { getUpcomingVisitsByProperty } from '../lib/visits'
 import { RootStackParamList } from '../navigation/AppNavigator'
 import FeatherIcon from 'react-native-vector-icons/Feather'
 
@@ -23,6 +24,7 @@ type NavigationProp = StackNavigationProp<RootStackParamList>
 export default function CardsScreen() {
   const navigation = useNavigation<NavigationProp>()
   const [properties, setProperties] = useState<Property[]>([])
+  const [visitsByProperty, setVisitsByProperty] = useState<Record<string, any[]>>({})
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,8 +33,12 @@ export default function CardsScreen() {
   const loadProperties = async () => {
     try {
       setError(null)
-      const data = await getProperties()
-      setProperties(data)
+      const [propertiesData, visitsData] = await Promise.all([
+        getProperties(),
+        getUpcomingVisitsByProperty(),
+      ])
+      setProperties(propertiesData)
+      setVisitsByProperty(visitsData)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -110,7 +116,11 @@ export default function CardsScreen() {
           data={relevantProperties}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <PropertyCard property={item} onPress={() => handlePropertyPress(item)} />
+            <PropertyCard
+              property={item}
+              onPress={() => handlePropertyPress(item)}
+              upcomingVisits={visitsByProperty[item.id] || []}
+            />
           )}
           contentContainerStyle={styles.listContent}
           refreshControl={
@@ -146,6 +156,7 @@ export default function CardsScreen() {
                         key={property.id}
                         property={property}
                         onPress={() => handlePropertyPress(property)}
+                        upcomingVisits={visitsByProperty[property.id] || []}
                       />
                     ))}
                   </>

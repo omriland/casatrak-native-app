@@ -12,6 +12,7 @@ import {
   ActionSheetIOS,
   Animated as RNAnimated,
 } from 'react-native'
+import RNCalendarEvents from 'react-native-calendar-events'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
@@ -23,7 +24,7 @@ import CalendarMonthView from '../components/CalendarMonthView'
 import { getVisits, deleteVisit, updateVisitStatus } from '../lib/visits'
 import { Visit, VisitStatus } from '../types/visit'
 import { getVisitStatusLabel, getVisitStatusColor, VISIT_STATUSES } from '../constants/visits'
-import { getProperty } from '../lib/properties'
+import { getProperty, formatAddress } from '../lib/properties'
 import { useFocusEffect } from '@react-navigation/native'
 
 type NavigationProp = StackNavigationProp<RootStackParamList>
@@ -210,6 +211,32 @@ export default function CalendarScreen() {
     })
   }
 
+  const handleAddToCalendar = async (visit: Visit) => {
+    try {
+      const authStatus = await RNCalendarEvents.requestPermissions()
+
+      if (authStatus === 'authorized') {
+        const title = `Meeting at ${visit.property?.title || visit.property?.address || 'Property'}`
+        const startDate = new Date(visit.scheduled_at)
+        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000) // Default 1 hour duration
+
+        await RNCalendarEvents.saveEvent(title, {
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          location: visit.property?.address || '',
+          notes: visit.notes || '',
+        })
+
+        Alert.alert('Success', 'Event added to your native calendar')
+      } else {
+        Alert.alert('Permission Denied', 'Please enable calendar access in settings to use this feature.')
+      }
+    } catch (error) {
+      console.error('Error adding to calendar:', error)
+      Alert.alert('Error', 'Failed to add event to calendar')
+    }
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -320,6 +347,7 @@ export default function CalendarScreen() {
                         visit={item}
                         onPress={() => handleVisitPress(item)}
                         onDelete={() => handleDeleteVisit(item.id)}
+                        onAddToCalendar={() => handleAddToCalendar(item)}
                         onLongPress={() => handleChangeVisitStatus(item)}
                         formatTime={formatTime}
                       />
@@ -532,13 +560,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontFamily: theme.typography.fontFamily,
   },
-  timeIndicator: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    marginTop: 6,
-    alignSelf: 'flex-start',
-  },
   visitContent: {
     flex: 1,
     paddingLeft: 16,
@@ -593,18 +614,64 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily,
     letterSpacing: 0.8,
   },
+  calendarAction: {
+    backgroundColor: theme.colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    flex: 1,
+    borderRadius: 16,
+  },
+  calendarButtonInner: {
+    width: 80,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 })
 
 interface SwipeableVisitItemProps {
   visit: Visit
   onPress: () => void
   onDelete: () => void
+  onAddToCalendar: () => void
   onLongPress?: () => void
   formatTime: (isoString: string) => string
 }
 
-function SwipeableVisitItem({ visit, onPress, onDelete, onLongPress, formatTime }: SwipeableVisitItemProps) {
+function SwipeableVisitItem({ visit, onPress, onDelete, onAddToCalendar, onLongPress, formatTime }: SwipeableVisitItemProps) {
   const swipeableRef = useRef<Swipeable>(null)
+
+  const renderLeftActions = (
+    progress: RNAnimated.AnimatedInterpolation<number>,
+    dragX: RNAnimated.AnimatedInterpolation<number>
+  ) => {
+    const trans = dragX.interpolate({
+      inputRange: [0, 100],
+      outputRange: [-80, 0],
+      extrapolate: 'clamp',
+    })
+
+    const scale = dragX.interpolate({
+      inputRange: [0, 40, 80],
+      outputRange: [0, 0.8, 1],
+      extrapolate: 'clamp',
+    })
+
+    return (
+      <View style={styles.calendarAction}>
+        <RNAnimated.View
+          style={[
+            styles.calendarButtonInner,
+            {
+              transform: [{ translateX: trans }, { scale }],
+            },
+          ]}
+        >
+          <FeatherIcon name="calendar" size={24} color={theme.colors.white} />
+        </RNAnimated.View>
+      </View>
+    )
+  }
 
   const renderRightActions = (
     progress: RNAnimated.AnimatedInterpolation<number>,
@@ -639,93 +706,77 @@ function SwipeableVisitItem({ visit, onPress, onDelete, onLongPress, formatTime 
   }
 
   return (
-    <Swipeable
-      ref={swipeableRef}
-      renderRightActions={renderRightActions}
-      onSwipeableOpen={(direction) => {
-        if (direction === 'right') {
-          // Auto-trigger delete when fully swiped (WhatsApp style)
-          // We add a small delay to let the animation finish or feel more natural
-          onDelete()
-          swipeableRef.current?.close()
-        }
-      }}
-      rightThreshold={100} // Increased threshold for "full swipe"
-      friction={2}
-      overshootRight={true}
-    >
-      <View style={styles.visitItemWrapper}>
-        <Swipeable
-          ref={swipeableRef}
-          renderRightActions={renderRightActions}
-          onSwipeableOpen={(direction) => {
-            if (direction === 'right') {
-              onDelete()
-              swipeableRef.current?.close()
-            }
-          }}
-          rightThreshold={100}
-          friction={2}
-          overshootRight={true}
+    <View style={styles.visitItemWrapper}>
+      <Swipeable
+        ref={swipeableRef}
+        renderLeftActions={renderLeftActions}
+        renderRightActions={renderRightActions}
+        onSwipeableOpen={(direction) => {
+          if (direction === 'right') {
+            onDelete()
+            swipeableRef.current?.close()
+          } else if (direction === 'left') {
+            onAddToCalendar()
+            swipeableRef.current?.close()
+          }
+        }}
+        leftThreshold={100}
+        rightThreshold={100}
+        friction={2}
+        overshootLeft={true}
+        overshootRight={true}
+      >
+        <TouchableOpacity
+          onPress={onPress}
+          onLongPress={onLongPress}
+          activeOpacity={0.7}
+          style={styles.visitItem}
         >
-          <TouchableOpacity
-            onPress={onPress}
-            onLongPress={onLongPress}
-            activeOpacity={0.7}
-            style={styles.visitItem}
-          >
-            <View style={styles.visitTimeContainer}>
-              <Text style={styles.visitTime}>{formatTime(visit.scheduled_at)}</Text>
+          <View style={styles.visitTimeContainer}>
+            <Text style={styles.visitTime}>{formatTime(visit.scheduled_at)}</Text>
+          </View>
+
+          <View style={styles.visitContent}>
+            <View style={styles.visitTitleRow}>
+              <Text style={styles.visitProperty} numberOfLines={1}>
+                {visit.property?.title || visit.property?.address || 'Property'}
+              </Text>
               <View
                 style={[
-                  styles.timeIndicator,
-                  { backgroundColor: getVisitStatusColor(visit.status) },
+                  styles.visitStatusBadge,
+                  { backgroundColor: getVisitStatusColor(visit.status) + '10' },
                 ]}
-              />
-            </View>
-
-            <View style={styles.visitContent}>
-              <View style={styles.visitTitleRow}>
-                <Text style={styles.visitProperty} numberOfLines={1}>
-                  {visit.property?.title || visit.property?.address || 'Property'}
-                </Text>
-                <View
+              >
+                <Text
                   style={[
-                    styles.visitStatusBadge,
-                    { backgroundColor: getVisitStatusColor(visit.status) + '10' },
+                    styles.visitStatusText,
+                    { color: getVisitStatusColor(visit.status) },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.visitStatusText,
-                      { color: getVisitStatusColor(visit.status) },
-                    ]}
-                  >
-                    {getVisitStatusLabel(visit.status).toUpperCase()}
-                  </Text>
-                </View>
+                  {getVisitStatusLabel(visit.status).toUpperCase()}
+                </Text>
               </View>
-
-              {visit.property?.address && visit.property.title && (
-                <View style={styles.locationRow}>
-                  <FeatherIcon name="map-pin" size={12} color={theme.colors.textMuted} style={{ marginRight: 4 }} />
-                  <Text style={styles.visitAddress} numberOfLines={1}>
-                    {visit.property.address}
-                  </Text>
-                </View>
-              )}
-
-              {visit.notes && (
-                <View style={styles.notesContainer}>
-                  <Text style={styles.visitNotes} numberOfLines={2}>
-                    {visit.notes}
-                  </Text>
-                </View>
-              )}
             </View>
-          </TouchableOpacity>
-        </Swipeable>
-      </View>
-    </Swipeable>
+
+            {visit.property?.address && visit.property.title && (
+              <View style={styles.locationRow}>
+                <FeatherIcon name="map-pin" size={12} color={theme.colors.textMuted} style={{ marginRight: 4 }} />
+                <Text style={styles.visitAddress} numberOfLines={1}>
+                  {formatAddress(visit.property.address)}
+                </Text>
+              </View>
+            )}
+
+            {visit.notes && (
+              <View style={styles.notesContainer}>
+                <Text style={styles.visitNotes} numberOfLines={2}>
+                  {visit.notes}
+                </Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Swipeable>
+    </View>
   )
 }

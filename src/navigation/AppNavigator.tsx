@@ -40,7 +40,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
 
   return (
-    <View style={[styles.tabBarContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+    <View style={[styles.tabBarContainer, { paddingBottom: Math.max(insets.bottom, 8) }]}>
       <View style={styles.barInside}>
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key]
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   barInside: {
     flexDirection: 'row',
     width: '100%',
-    height: 70,
+    height: 58,
     alignItems: 'center',
     justifyContent: 'space-around',
     paddingHorizontal: 10,
@@ -139,6 +139,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: '100%',
+    marginTop: 10,
   },
   activeDot: {
     width: 4,

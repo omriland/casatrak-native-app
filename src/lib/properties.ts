@@ -327,3 +327,22 @@ export function getPublicUrl(filePath: string): string {
 
   return data.publicUrl
 }
+
+/**
+ * Formats an address by removing the country name if present
+ */
+export function formatAddress(address: string | null | undefined): string {
+  if (!address) return ''
+
+  const parts = address.split(',')
+  if (parts.length > 1) {
+    const lastPart = parts[parts.length - 1].trim()
+    const countries = ['Israel', 'ישראל']
+
+    if (countries.some(country => lastPart.includes(country))) {
+      return parts.slice(0, parts.length - 1).join(',').trim()
+    }
+  }
+
+  return address
+}

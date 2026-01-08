@@ -192,6 +192,50 @@ export async function deleteVisit(id: string): Promise<void> {
 }
 
 /**
+ * Get upcoming visits for the next 3 days (today, tomorrow, day after tomorrow)
+ * Returns visits grouped by property_id
+ */
+export async function getUpcomingVisitsByProperty(): Promise<Record<string, Visit[]>> {
+  try {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const dayAfterTomorrow = new Date(today)
+    dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2)
+    dayAfterTomorrow.setHours(23, 59, 59, 999) // End of day after tomorrow
+
+    const startISO = today.toISOString()
+    const endISO = dayAfterTomorrow.toISOString()
+
+    const { data, error } = await supabase
+      .from('visits')
+      .select('*')
+      .eq('status', 'scheduled')
+      .gte('scheduled_at', startISO)
+      .lte('scheduled_at', endISO)
+      .order('scheduled_at', { ascending: true })
+
+    if (error) {
+      console.error('Supabase error:', error)
+      throw error
+    }
+
+    // Group visits by property_id
+    const visitsByProperty: Record<string, Visit[]> = {}
+    ;(data || []).forEach((visit: Visit) => {
+      if (!visitsByProperty[visit.property_id]) {
+        visitsByProperty[visit.property_id] = []
+      }
+      visitsByProperty[visit.property_id].push(visit)
+    })
+
+    return visitsByProperty
+  } catch (error: any) {
+    console.error('Error in getUpcomingVisitsByProperty:', error)
+    throw error
+  }
+}
+
+/**
  * Update visit status (quick status update)
  */
 export async function updateVisitStatus(id: string, status: VisitStatus): Promise<Visit> {

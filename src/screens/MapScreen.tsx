@@ -5,7 +5,7 @@ import MapView, { Marker, PROVIDER_DEFAULT, Region, Callout } from 'react-native
 import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { RootStackParamList } from '../navigation/AppNavigator'
-import { getProperties, updateProperty } from '../lib/properties'
+import { getProperties, updateProperty, formatAddress } from '../lib/properties'
 import { Property, PropertyStatus } from '../types/property'
 import { theme } from '../theme/theme'
 import { getStatusLabel, getStatusColor } from '../constants/statuses'
@@ -782,7 +782,7 @@ export default function MapScreen() {
 
               {/* Address */}
               <Text style={styles.cardAddress} numberOfLines={1}>
-                {property.address}
+                {formatAddress(property.address)}
               </Text>
 
               {/* Status Badge */}
