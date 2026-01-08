@@ -42,6 +42,7 @@ export default function SearchScreen() {
 
   const filteredProperties = properties.filter((property) => {
     if (!searchQuery.trim()) return false
+    if (property.status === 'Irrelevant') return false
     const query = searchQuery.toLowerCase()
     return (
       property.title?.toLowerCase().includes(query) ||

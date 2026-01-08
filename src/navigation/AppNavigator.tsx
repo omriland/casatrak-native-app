@@ -11,17 +11,22 @@ import FlaggedScreen from '../screens/FlaggedScreen'
 import PropertyDetailScreen from '../screens/PropertyDetailScreen'
 import PropertyFormScreen from '../screens/PropertyFormScreen'
 import PriceCalculatorScreen from '../screens/PriceCalculatorScreen'
+import CalendarScreen from '../screens/CalendarScreen'
+import VisitFormScreen from '../screens/VisitFormScreen'
 import { Property } from '../types/property'
+import { Visit } from '../types/visit'
 
 // Define navigation types
 export type RootStackParamList = {
   MainTabs: { screen?: keyof MainTabParamList } | undefined
   PropertyDetail: { property: Property }
   PropertyForm: { property?: Property }
+  VisitForm: { visit?: Visit; propertyId?: string; scheduledDate?: string }
 }
 
 export type MainTabParamList = {
   Home: undefined
+  Calendar: undefined
   Calculator: undefined
   Flagged: undefined
 }
@@ -42,8 +47,9 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           const isFocused = state.index === index
 
 
-          let iconName: 'home' | 'calculate' | 'bookmark' = 'home'
-          if (route.name === 'Calculator') iconName = 'calculate'
+          let iconName: 'home' | 'calendar' | 'calculate' | 'bookmark' = 'home'
+          if (route.name === 'Calendar') iconName = 'calendar'
+          else if (route.name === 'Calculator') iconName = 'calculate'
           else if (route.name === 'Flagged') iconName = 'bookmark'
 
           const color = isFocused ? theme.colors.primary : theme.colors.textMuted
@@ -80,6 +86,7 @@ function MainTabs() {
       }}
     >
       <Tab.Screen name="Home" component={DashboardScreen} />
+      <Tab.Screen name="Calendar" component={CalendarScreen} />
       <Tab.Screen name="Calculator" component={PriceCalculatorScreen} />
       <Tab.Screen name="Flagged" component={FlaggedScreen} />
     </Tab.Navigator>
@@ -102,6 +109,11 @@ export default function AppNavigator() {
       <Stack.Screen
         name="PropertyForm"
         component={PropertyFormScreen}
+        options={{ presentation: 'modal' }}
+      />
+      <Stack.Screen
+        name="VisitForm"
+        component={VisitFormScreen}
         options={{ presentation: 'modal' }}
       />
     </Stack.Navigator>

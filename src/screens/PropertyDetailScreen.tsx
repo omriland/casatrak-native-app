@@ -16,9 +16,10 @@ import {
   KeyboardAvoidingView,
   ActionSheetIOS,
   Keyboard,
+  Animated as RNAnimated,
 } from 'react-native'
 import PagerView from 'react-native-pager-view'
-import { GestureDetector, Gesture } from 'react-native-gesture-handler'
+import { Swipeable, Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -26,7 +27,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { RouteProp, useRoute, useNavigation } from '@react-navigation/native'
+import { RouteProp, useRoute, useNavigation, useFocusEffect } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { RootStackParamList } from '../navigation/AppNavigator'
 import { theme } from '../theme/theme'
@@ -62,10 +63,122 @@ import {
 import { CONFIG } from '../lib/config'
 import { Note, PropertyStatus, Attachment } from '../types/property'
 import { PROPERTY_STATUSES, getStatusLabel, getStatusColor } from '../constants/statuses'
+import { getVisitsByProperty, deleteVisit, updateVisitStatus } from '../lib/visits'
+import { Visit, VisitStatus } from '../types/visit'
+import { getVisitStatusLabel, getVisitStatusColor, VISIT_STATUSES } from '../constants/visits'
 
 type NavigationProp = StackNavigationProp<RootStackParamList>
 type PropertyDetailRouteProp = RouteProp<RootStackParamList, 'PropertyDetail'>
 
+interface SwipeableVisitItemProps {
+  visit: Visit
+  formatVisitDate: (isoString: string) => string
+  formatVisitTime: (isoString: string) => string
+  onPress: () => void
+  onDelete: () => void
+  onLongPress: () => void
+  isPast?: boolean
+}
+
+function SwipeableVisitItem({
+  visit,
+  formatVisitDate,
+  formatVisitTime,
+  onPress,
+  onDelete,
+  onLongPress,
+  isPast = false,
+}: SwipeableVisitItemProps) {
+  const swipeableRef = useRef<Swipeable>(null)
+
+  const renderRightActions = (
+    progress: RNAnimated.AnimatedInterpolation<number>,
+    dragX: RNAnimated.AnimatedInterpolation<number>
+  ) => {
+    const trans = dragX.interpolate({
+      inputRange: [-100, 0],
+      outputRange: [0, 80],
+      extrapolate: 'clamp',
+    })
+
+    const scale = dragX.interpolate({
+      inputRange: [-80, -40, 0],
+      outputRange: [1, 0.8, 0],
+      extrapolate: 'clamp',
+    })
+
+    return (
+      <View style={styles.deleteAction}>
+        <RNAnimated.View
+          style={[
+            styles.deleteButtonInner,
+            {
+              transform: [{ translateX: trans }, { scale }],
+            },
+          ]}
+        >
+          <FeatherIcon name="trash-2" size={22} color={theme.colors.white} />
+        </RNAnimated.View>
+      </View>
+    )
+  }
+
+  return (
+    <View style={styles.visitItemWrapper}>
+      <Swipeable
+        ref={swipeableRef}
+        renderRightActions={renderRightActions}
+        onSwipeableOpen={(direction) => {
+          if (direction === 'right') {
+            onDelete()
+            swipeableRef.current?.close()
+          }
+        }}
+        rightThreshold={100}
+        friction={2}
+        overshootRight={true}
+      >
+        <View style={[styles.visitCard, isPast && styles.pastVisitCard]}>
+          <TouchableOpacity
+            onPress={onPress}
+            onLongPress={onLongPress}
+            activeOpacity={0.7}
+            style={{ flex: 1 }}
+          >
+            <View style={styles.visitCardContent}>
+              <View style={styles.visitCardLeft}>
+                <Text style={styles.visitDate}>{formatVisitDate(visit.scheduled_at)}</Text>
+                <Text style={styles.visitTime}>{formatVisitTime(visit.scheduled_at)}</Text>
+              </View>
+              <View style={styles.visitCardRight}>
+                <View
+                  style={[
+                    styles.visitStatusBadge,
+                    { backgroundColor: getVisitStatusColor(visit.status) + '15' },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.visitStatusText,
+                      { color: getVisitStatusColor(visit.status) },
+                    ]}
+                  >
+                    {getVisitStatusLabel(visit.status)}
+                  </Text>
+                </View>
+                {visit.notes && !isPast && (
+                  <Text style={styles.visitNotesPreview} numberOfLines={1}>
+                    {visit.notes}
+                  </Text>
+                )}
+              </View>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </Swipeable>
+    </View>
+  )
+}
 
 export default function PropertyDetailScreen() {
   const scrollRef = useRef<ScrollView>(null)
@@ -77,9 +190,11 @@ export default function PropertyDetailScreen() {
   const [property, setProperty] = useState(initialPropertyData)
   const [notes, setNotes] = useState<Note[]>([])
   const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [visits, setVisits] = useState<Visit[]>([])
   const [newNote, setNewNote] = useState('')
   const [loadingNotes, setLoadingNotes] = useState(true)
   const [loadingAttachments, setLoadingAttachments] = useState(true)
+  const [loadingVisits, setLoadingVisits] = useState(true)
   const [savingNote, setSavingNote] = useState(false)
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
   const [videoThumbnails, setVideoThumbnails] = useState<Record<string, string>>({})
@@ -252,6 +367,7 @@ export default function PropertyDetailScreen() {
   useEffect(() => {
     loadNotes()
     loadAttachments()
+    loadVisits()
 
     const keyboardDidShowListener = Keyboard.addListener(
       'keyboardDidShow',
@@ -267,6 +383,123 @@ export default function PropertyDetailScreen() {
       keyboardDidShowListener.remove()
     }
   }, [])
+
+  // Refresh visits when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadVisits()
+    }, [])
+  )
+
+  const loadVisits = async () => {
+    try {
+      setLoadingVisits(true)
+      const data = await getVisitsByProperty(property.id)
+      setVisits(data)
+    } catch (error) {
+      console.error('Error loading visits:', error)
+    } finally {
+      setLoadingVisits(false)
+    }
+  }
+
+  const handleDeleteVisit = async (visitId: string) => {
+    Alert.alert('Delete Visit', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteVisit(visitId)
+            setVisits(visits.filter((v) => v.id !== visitId))
+          } catch (error) {
+            Alert.alert('Error', 'Failed to delete visit')
+          }
+        },
+      },
+    ])
+  }
+
+  const handleChangeVisitStatus = async (visit: Visit) => {
+    const currentStatusIndex = VISIT_STATUSES.indexOf(visit.status)
+    const otherStatuses = VISIT_STATUSES.filter((s) => s !== visit.status)
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', ...otherStatuses.map((s) => getVisitStatusLabel(s))],
+          cancelButtonIndex: 0,
+        },
+        async (buttonIndex) => {
+          if (buttonIndex > 0) {
+            const newStatus = otherStatuses[buttonIndex - 1]
+            try {
+              await updateVisitStatus(visit.id, newStatus)
+              setVisits(visits.map((v) => (v.id === visit.id ? { ...v, status: newStatus } : v)))
+            } catch (error) {
+              Alert.alert('Error', 'Failed to update visit status')
+            }
+          }
+        }
+      )
+    } else {
+      Alert.alert(
+        'Change Status',
+        'Select new status:',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          ...otherStatuses.map((status) => ({
+            text: getVisitStatusLabel(status),
+            onPress: async () => {
+              try {
+                await updateVisitStatus(visit.id, status)
+                setVisits(visits.map((v) => (v.id === visit.id ? { ...v, status } : v)))
+              } catch (error) {
+                Alert.alert('Error', 'Failed to update visit status')
+              }
+            },
+          })),
+        ],
+        { cancelable: true }
+      )
+    }
+  }
+
+  const formatVisitDate = (isoString: string) => {
+    const date = new Date(isoString)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const visitDate = new Date(date)
+    visitDate.setHours(0, 0, 0, 0)
+
+    if (visitDate.getTime() === today.getTime()) {
+      return 'Today'
+    }
+    if (visitDate.getTime() === today.getTime() + 86400000) {
+      return 'Tomorrow'
+    }
+
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
+    })
+  }
+
+  const formatVisitTime = (isoString: string) => {
+    const date = new Date(isoString)
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+  }
+
+  // Group visits by status
+  const scheduledVisits = visits.filter((v) => v.status === 'scheduled' && new Date(v.scheduled_at) >= new Date())
+  const completedVisits = visits.filter((v) => v.status === 'completed')
+  const cancelledVisits = visits.filter((v) => v.status === 'cancelled')
 
   const handleAddFromLibrary = async () => {
     try {
@@ -1027,6 +1260,72 @@ export default function PropertyDetailScreen() {
             )}
           </Section>
 
+          {/* Visits Section */}
+          <Section
+            title={`UPCOMING VISITS (${String(scheduledVisits.length)})`}
+            rightAction={{
+              label: 'Schedule',
+              onPress: () => navigation.navigate('VisitForm', { propertyId: property.id }),
+            }}
+          >
+            {loadingVisits ? (
+              <ActivityIndicator color={theme.colors.primary} />
+            ) : scheduledVisits.length === 0 ? (
+              <View style={styles.emptyVisits}>
+                <FeatherIcon name="calendar" size={32} color={theme.colors.textMuted} style={{ opacity: 0.3, marginBottom: 8 }} />
+                <Text style={styles.emptyVisitsText}>No visits scheduled</Text>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('VisitForm', { propertyId: property.id })}
+                  style={styles.scheduleVisitButton}
+                >
+                  <Text style={styles.scheduleVisitButtonText}>Schedule Visit</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              scheduledVisits.map((visit) => (
+                <SwipeableVisitItem
+                  key={visit.id}
+                  visit={visit}
+                  formatVisitDate={formatVisitDate}
+                  formatVisitTime={formatVisitTime}
+                  onPress={() => navigation.navigate('VisitForm', { visit })}
+                  onDelete={() => handleDeleteVisit(visit.id)}
+                  onLongPress={() => handleChangeVisitStatus(visit)}
+                />
+              ))
+            )}
+
+            {(completedVisits.length > 0 || cancelledVisits.length > 0) && (
+              <View style={styles.pastVisitsSection}>
+                <Text style={styles.pastVisitsTitle}>Past Visits</Text>
+                {completedVisits.map((visit) => (
+                  <SwipeableVisitItem
+                    key={visit.id}
+                    visit={visit}
+                    formatVisitDate={formatVisitDate}
+                    formatVisitTime={formatVisitTime}
+                    onPress={() => navigation.navigate('VisitForm', { visit })}
+                    onDelete={() => handleDeleteVisit(visit.id)}
+                    onLongPress={() => handleChangeVisitStatus(visit)}
+                    isPast={true}
+                  />
+                ))}
+                {cancelledVisits.map((visit) => (
+                  <SwipeableVisitItem
+                    key={visit.id}
+                    visit={visit}
+                    formatVisitDate={formatVisitDate}
+                    formatVisitTime={formatVisitTime}
+                    onPress={() => navigation.navigate('VisitForm', { visit })}
+                    onDelete={() => handleDeleteVisit(visit.id)}
+                    onLongPress={() => handleChangeVisitStatus(visit)}
+                    isPast={true}
+                  />
+                ))}
+              </View>
+            )}
+          </Section>
+
           {/* Notes Section */}
           <Section title={`Notes (${String(notes.length)})`}>
             {loadingNotes ? (
@@ -1782,5 +2081,113 @@ const styles = StyleSheet.create({
   pagerVideo: {
     width: '100%',
     height: '100%',
+  },
+  emptyVisits: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  emptyVisitsText: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    fontFamily: theme.typography.fontFamily,
+    marginBottom: 16,
+  },
+  scheduleVisitButton: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  scheduleVisitButtonText: {
+    color: theme.colors.white,
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: theme.typography.fontFamily,
+  },
+  visitCard: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  visitItemWrapper: {
+    marginBottom: 12,
+  },
+  pastVisitCard: {
+    opacity: 0.7,
+  },
+  visitCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  visitCardLeft: {
+    flex: 1,
+  },
+  visitCardRight: {
+    alignItems: 'flex-end',
+    marginRight: 12,
+  },
+  visitDate: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: theme.colors.text,
+    fontFamily: theme.typography.fontFamily,
+    marginBottom: 4,
+  },
+  visitTime: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    fontFamily: theme.typography.fontFamily,
+  },
+  visitStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginBottom: 4,
+  },
+  visitStatusText: {
+    fontSize: 10,
+    fontWeight: '800',
+    fontFamily: theme.typography.fontFamily,
+    letterSpacing: 0.5,
+  },
+  visitNotesPreview: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    fontFamily: theme.typography.fontFamily,
+    fontStyle: 'italic',
+    maxWidth: 150,
+  },
+  visitDeleteButton: {
+    padding: 8,
+  },
+  deleteAction: {
+    backgroundColor: theme.colors.error,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    flex: 1,
+    borderRadius: 12,
+  },
+  deleteButtonInner: {
+    width: 80,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pastVisitsSection: {
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  pastVisitsTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.colors.textMuted,
+    fontFamily: theme.typography.fontFamily,
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 })
