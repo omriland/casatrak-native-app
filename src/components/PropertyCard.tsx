@@ -128,10 +128,10 @@ export default function PropertyCard({ property, onPress, customStyle, upcomingV
         <View style={styles.visitsSection}>
           {upcomingVisits.map((visit) => (
             <View key={visit.id} style={styles.visitLine}>
-              <View style={[styles.visitIndicator, { backgroundColor: getVisitStatusColor(visit.status) + '40' }]} />
+              <View style={[styles.visitIndicator, { backgroundColor: theme.colors.primary + '60' }]} />
               <View style={styles.visitContent}>
                 <View style={styles.visitHeader}>
-                  <FeatherIcon name="calendar" size={12} color={theme.colors.textSecondary} />
+                  <FeatherIcon name="calendar" size={13} color={theme.colors.primary} />
                   <Text style={styles.visitDateText}>
                     {formatVisitDate(visit.scheduled_at)} • {formatVisitTime(visit.scheduled_at)}
                   </Text>
@@ -284,8 +284,12 @@ const styles = StyleSheet.create({
   visitsSection: {
     marginTop: 16,
     paddingTop: 12,
+    paddingBottom: 10,
+    paddingHorizontal: 12,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.03)',
+    backgroundColor: theme.colors.primary + '08',
+    borderRadius: 8,
     gap: 8,
   },
   visitLine: {
@@ -294,9 +298,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   visitIndicator: {
-    width: 3,
-    height: 12,
-    borderRadius: 1.5,
+    width: 4,
+    height: 14,
+    borderRadius: 2,
     marginTop: 2,
   },
   visitContent: {
@@ -311,9 +315,9 @@ const styles = StyleSheet.create({
   visitDateText: {
     flex: 1,
     fontSize: 13,
-    color: theme.colors.textSecondary,
+    color: theme.colors.text,
     fontFamily: theme.typography.fontFamily,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   visitNotesText: {
     fontSize: 12,
