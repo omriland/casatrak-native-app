@@ -39,6 +39,28 @@ const Tab = createBottomTabNavigator<MainTabParamList>()
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
 
+  const handleTabPress = (route: any, isFocused: boolean) => {
+    if (route.name === 'Home' && isFocused) {
+      // If already on Home tab, check nested navigator state
+      const homeRoute = state.routes[state.index]
+      if (homeRoute?.name === 'Home') {
+        // Get the nested navigator state from the Home route
+        const nestedState = homeRoute.state
+        if (nestedState) {
+          const currentSubTab = nestedState.routes[nestedState.index]?.name
+          // If on Map or Statistics, navigate to Cards (Listings)
+          if (currentSubTab === 'Map' || currentSubTab === 'Statistics') {
+            navigation.navigate('Home', { screen: 'Cards' })
+            return
+          }
+        }
+      }
+      // If already on Cards or no nested state, do nothing (or could pop to root)
+    }
+    // Normal navigation for other tabs or when switching tabs
+    navigation.navigate(route.name)
+  }
+
   return (
     <View style={[styles.tabBarContainer, { paddingBottom: Math.max(insets.bottom, 8) }]}>
       <View style={styles.barInside}>
@@ -52,12 +74,12 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           else if (route.name === 'Calculator') iconName = 'calculate'
           else if (route.name === 'Flagged') iconName = 'bookmark'
 
-          const color = isFocused ? theme.colors.primary : theme.colors.textMuted
+          const color = isFocused ? theme.colors.secondary : theme.colors.textMuted
 
           return (
             <TouchableOpacity
               key={route.key}
-              onPress={() => navigation.navigate(route.name)}
+              onPress={() => handleTabPress(route, isFocused)}
               style={styles.tabItem}
               activeOpacity={0.7}
             >
@@ -145,7 +167,7 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.secondary,
     marginTop: 4,
   },
   fab: {

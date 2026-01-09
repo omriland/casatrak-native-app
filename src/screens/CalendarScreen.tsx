@@ -34,7 +34,9 @@ export default function CalendarScreen() {
   const navigation = useNavigation<NavigationProp>()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [visits, setVisits] = useState<Visit[]>([])
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const [selectedDate, setSelectedDate] = useState<Date | null>(today)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 

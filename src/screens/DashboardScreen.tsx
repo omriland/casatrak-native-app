@@ -1,5 +1,5 @@
 import React from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs'
 import { MaterialTopTabBarProps } from '@react-navigation/material-top-tabs'
@@ -92,20 +92,23 @@ export default function DashboardScreen() {
   return (
     <View style={styles.container}>
       {/* Refined Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
-        <View>
-          <Text style={styles.titleText}>CasaTrack</Text>
-        </View>
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            onPress={() => (navigation as any).navigate('PropertyForm', {})}
-            style={styles.actionButton}
-          >
-            <FeatherIcon name="plus" size={22} color={theme.colors.primary} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleLogout} style={styles.actionButton}>
-            <FeatherIcon name="log-out" size={20} color={theme.colors.textSecondary} />
-          </TouchableOpacity>
+      <View style={[styles.headerContainer, { paddingTop: insets.top + 16 }]}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.titleText}>CasaTrack</Text>
+          </View>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              onPress={() => (navigation as any).navigate('PropertyForm', {})}
+              style={styles.actionButton}
+              activeOpacity={0.7}
+            >
+              <FeatherIcon name="plus" size={20} color={theme.colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleLogout} style={styles.actionButton} activeOpacity={0.7}>
+              <FeatherIcon name="log-out" size={18} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -127,27 +130,33 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#FAFAFA',
+  },
+  headerContainer: {
+    backgroundColor: '#FAFAFA',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.04)',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'baseline',
+    alignItems: 'center',
     paddingHorizontal: 24,
     paddingBottom: 20,
   },
   titleText: {
-    fontSize: 34,
+    fontSize: 32,
     fontWeight: '800',
     color: theme.colors.text,
     fontFamily: theme.typography.fontFamily,
+    letterSpacing: -0.5,
   },
   content: {
     flex: 1,
   },
   tabBarWrapper: {
     paddingVertical: 12,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#FAFAFA',
   },
   tabBarContainer: {
     paddingHorizontal: 24,
@@ -179,14 +188,15 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
   },
   actionButton: {
-    padding: 8,
-    borderRadius: 10,
-    backgroundColor: theme.colors.surface,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: theme.colors.white,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    borderColor: 'rgba(0,0,0,0.06)',
     justifyContent: 'center',
     alignItems: 'center',
   },

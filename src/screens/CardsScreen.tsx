@@ -173,7 +173,7 @@ export default function CardsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#FAFAFA',
   },
   centerContainer: {
     flex: 1,
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
   countLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: theme.colors.textMuted,
+    color: '#6B7280',
     fontFamily: theme.typography.fontFamily,
     textTransform: 'uppercase',
     letterSpacing: 1,

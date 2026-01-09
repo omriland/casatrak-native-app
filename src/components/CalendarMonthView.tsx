@@ -250,9 +250,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   todayContent: {
-    backgroundColor: theme.colors.accent + '15',
+    backgroundColor: theme.colors.secondary + '15',
     borderWidth: 1,
-    borderColor: theme.colors.accent + '40',
+    borderColor: theme.colors.secondary + '40',
   },
   selectedContent: {
     backgroundColor: theme.colors.primary + '10',
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
     opacity: 0.3,
   },
   dayNumberToday: {
-    color: theme.colors.accent,
+    color: theme.colors.secondary,
     fontWeight: '800',
   },
   dayNumberSelected: {
