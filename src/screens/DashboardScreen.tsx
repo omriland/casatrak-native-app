@@ -99,6 +99,13 @@ export default function DashboardScreen() {
           </View>
           <View style={styles.headerActions}>
             <TouchableOpacity
+              onPress={() => (navigation as any).navigate('Search')}
+              style={styles.actionButton}
+              activeOpacity={0.7}
+            >
+              <FeatherIcon name="search" size={20} color={theme.colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
               onPress={() => (navigation as any).navigate('PropertyForm', {})}
               style={styles.actionButton}
               activeOpacity={0.7}

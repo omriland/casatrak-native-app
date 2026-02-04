@@ -13,6 +13,7 @@ import PropertyFormScreen from '../screens/PropertyFormScreen'
 import PriceCalculatorScreen from '../screens/PriceCalculatorScreen'
 import CalendarScreen from '../screens/CalendarScreen'
 import VisitFormScreen from '../screens/VisitFormScreen'
+import SearchScreen from '../screens/SearchScreen'
 import { Property } from '../types/property'
 import { Visit } from '../types/visit'
 
@@ -22,6 +23,7 @@ export type RootStackParamList = {
   PropertyDetail: { property: Property }
   PropertyForm: { property?: Property }
   VisitForm: { visit?: Visit; propertyId?: string; scheduledDate?: string }
+  Search: undefined
 }
 
 export type MainTabParamList = {
@@ -136,6 +138,11 @@ export default function AppNavigator() {
       <Stack.Screen
         name="VisitForm"
         component={VisitFormScreen}
+        options={{ presentation: 'modal' }}
+      />
+      <Stack.Screen
+        name="Search"
+        component={SearchScreen}
         options={{ presentation: 'modal' }}
       />
     </Stack.Navigator>

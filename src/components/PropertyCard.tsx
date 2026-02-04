@@ -13,6 +13,7 @@ interface PropertyCardProps {
   onPress: () => void
   customStyle?: any
   upcomingVisits?: Visit[]
+  showDateAdded?: boolean
 }
 
 const formatPrice = (price: number | null) => {
@@ -21,6 +22,15 @@ const formatPrice = (price: number | null) => {
     style: 'decimal',
     maximumFractionDigits: 0,
   }).format(price) + ' ₪'
+}
+
+const formatAddedDate = (isoString: string) => {
+  const date = new Date(isoString)
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
 
 const Stars = ({ rating }: { rating?: number }) => {
@@ -64,7 +74,13 @@ const formatVisitTime = (isoString: string) => {
   })
 }
 
-export default function PropertyCard({ property, onPress, customStyle, upcomingVisits = [] }: PropertyCardProps) {
+export default function PropertyCard({
+  property,
+  onPress,
+  customStyle,
+  upcomingVisits = [],
+  showDateAdded = false
+}: PropertyCardProps) {
   const isFlagged = property.is_flagged
 
   return (
@@ -89,6 +105,9 @@ export default function PropertyCard({ property, onPress, customStyle, upcomingV
             <Text style={[styles.statusText, { color: getStatusColor(property.status) }]}>{getStatusLabel(property.status)}</Text>
           </View>
           <Stars rating={property.rating} />
+          {showDateAdded && (
+            <Text style={styles.dateAddedText}>Added {formatAddedDate(property.created_at)}</Text>
+          )}
         </View>
       </View>
 
@@ -217,6 +236,12 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontFamily: theme.typography.fontFamily,
     letterSpacing: 0.5,
+  },
+  dateAddedText: {
+    fontSize: 10,
+    color: theme.colors.textMuted,
+    fontFamily: theme.typography.fontFamily,
+    marginTop: 4,
   },
   addressRow: {
     flexDirection: 'row',
